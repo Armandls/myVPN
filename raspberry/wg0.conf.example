@@ -1,0 +1,21 @@
+# Raspberry Pi WireGuard config (reverse tunnel + LAN gateway)
+# Copy to /etc/wireguard/wg0.conf and fill in the placeholders.
+# NEVER commit the real file (it contains the private key).
+
+[Interface]
+Address = 10.10.0.2/24
+PrivateKey = <PI_PRIVATE_KEY>
+
+# MASQUERADE toward the home LAN so remote clients can reach LAN devices.
+# <LAN_IFACE> is the Pi interface facing the home network (e.g. eth0 or wlan0).
+PostUp   = iptables -t nat -A POSTROUTING -o <LAN_IFACE> -j MASQUERADE
+PostDown = iptables -t nat -D POSTROUTING -o <LAN_IFACE> -j MASQUERADE
+
+# --- Peer: VPS (hub) ---
+[Peer]
+PublicKey = <VPS_PUBLIC_KEY>
+Endpoint = <VPS_PUBLIC_IP>:51820
+# Traffic for the VPN network goes to the VPS
+AllowedIPs = 10.10.0.0/24
+# Keep the outbound tunnel alive through the home router NAT
+PersistentKeepalive = 25

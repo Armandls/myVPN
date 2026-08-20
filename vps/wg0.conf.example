@@ -1,0 +1,33 @@
+# VPS WireGuard config (hub)
+# Copy to /etc/wireguard/wg0.conf and fill in the placeholders.
+# NEVER commit the real file (it contains the private key).
+
+[Interface]
+Address = 10.10.0.1/24
+ListenPort = 51820
+PrivateKey = <VPS_PRIVATE_KEY>
+
+# FORWARD: allow traffic to traverse the VPS
+PostUp   = iptables -A FORWARD -i wg0 -j ACCEPT
+PostUp   = iptables -A FORWARD -o wg0 -j ACCEPT
+# MASQUERADE: exit to the internet through the public interface (full tunnel)
+PostUp   = iptables -t nat -A POSTROUTING -o <PUBLIC_IFACE> -j MASQUERADE
+PostDown = iptables -D FORWARD -i wg0 -j ACCEPT
+PostDown = iptables -D FORWARD -o wg0 -j ACCEPT
+PostDown = iptables -t nat -D POSTROUTING -o <PUBLIC_IFACE> -j MASQUERADE
+
+# --- Peer: Raspberry Pi ---
+[Peer]
+PublicKey = <PI_PUBLIC_KEY>
+# Route to the Pi + to the home LAN through this peer
+AllowedIPs = 10.10.0.2/32, <HOME_LAN_SUBNET>
+
+# --- Peer: Phone ---
+# [Peer]
+# PublicKey = <PHONE_PUBLIC_KEY>
+# AllowedIPs = 10.10.0.11/32
+
+# --- Peer: Laptop ---
+# [Peer]
+# PublicKey = <LAPTOP_PUBLIC_KEY>
+# AllowedIPs = 10.10.0.12/32

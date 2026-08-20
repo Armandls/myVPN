@@ -1,0 +1,21 @@
+# Client WireGuard config (phone / laptop)
+# Two profiles: SPLIT (home LAN only) and FULL (everything through the VPS).
+# Use ONE [Interface]/[Peer] pair per profile file.
+# NEVER commit the real file (it contains the private key).
+
+[Interface]
+Address = 10.10.0.11/24
+PrivateKey = <CLIENT_PRIVATE_KEY>
+# Optional DNS (e.g. a resolver reachable through the tunnel or a public one)
+# DNS = 1.1.1.1
+
+[Peer]
+PublicKey = <VPS_PUBLIC_KEY>
+Endpoint = <VPS_PUBLIC_IP>:51820
+PersistentKeepalive = 25
+
+# --- SPLIT profile: only reach the home LAN, rest of the traffic goes normally ---
+AllowedIPs = 10.10.0.0/24, <HOME_LAN_SUBNET>
+
+# --- FULL profile: send ALL traffic through the VPS (use in public Wi-Fi) ---
+# AllowedIPs = 0.0.0.0/0

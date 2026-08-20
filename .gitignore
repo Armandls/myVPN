@@ -1,0 +1,15 @@
+# WireGuard keys (NEVER commit)
+*.key
+
+# Real configs (contain private keys)
+*.conf
+
+# Allow templates explicitly
+!*.conf.example
+
+# Backups / temporary
+*.bak
+*.orig
+
+# Contracts / PDFs
+*.pdf
