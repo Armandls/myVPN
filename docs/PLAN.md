@@ -58,7 +58,7 @@ Hub-and-spoke topology: all peer traffic passes through the VPS.
 - **OS**: Debian 12 or Ubuntu LTS.
 - Requirements: a dedicated public IPv4 + SSH access.
 
-## Phase 1 — Prepare the VPS (hub)
+## Phase 1 — Prepare the VPS (hub) — DONE
 1. SSH hardening (see HARDENING.md).
 2. Install WireGuard (`wireguard-tools`).
 3. Enable IP forwarding (`net.ipv4.ip_forward=1`).
@@ -71,7 +71,7 @@ Hub-and-spoke topology: all peer traffic passes through the VPS.
 6. Firewall: allow **51820/udp** (WireGuard) + the SSH port.
 7. `wg-quick up wg0` + `systemctl enable wg-quick@wg0` (auto start).
 
-## Phase 2 — Configure the Raspberry Pi (reverse tunnel + LAN gateway)
+## Phase 2 — Configure the Raspberry Pi (reverse tunnel + LAN gateway) — DONE
 1. Install WireGuard.
 2. Enable IP forwarding (to forward toward the home LAN).
 3. Generate the Pi key pair.
@@ -90,6 +90,17 @@ Hub-and-spoke topology: all peer traffic passes through the VPS.
 
 > The home LAN must be **different** from the network you connect from (avoid route
 > conflicts, e.g. a hotel Wi-Fi on the same subnet).
+
+> **Gotcha (route to the LAN):** adding a peer with `wg set` registers its
+> `allowed-ips` but does NOT create the kernel route to the LAN subnet. Reaching the
+> home LAN from the VPS then fails (100% packet loss). Fix: bring the peer in via
+> `wg-quick` (e.g. `systemctl restart wg-quick@wg0`), which creates the route from the
+> peer's `AllowedIPs` and makes it persistent. A `ttl=63` on the VPS→router ping (one
+> hop less than 64) confirms traffic is routed through the Pi.
+
+> **Gotcha (iptables on the Pi):** recent Raspberry Pi OS ships nftables and lacks the
+> `iptables` binary, so `wg-quick` PostUp fails with `iptables: command not found`.
+> Fix: `sudo apt install iptables`.
 
 ## Phase 3 — Clients (phone and laptop)
 1. Generate a key pair for each client.
