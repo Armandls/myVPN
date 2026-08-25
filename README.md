@@ -69,7 +69,7 @@ Hub-and-spoke topology: all peer traffic flows through the VPS.
 - **Phase 0** — Provision and harden the VPS. (done — see `docs/HARDENING.md`)
 - **Phase 1** — VPS as WireGuard hub. (done)
 - **Phase 2** — Raspberry Pi reverse tunnel + LAN gateway. (done)
-- **Phase 3** — Clients (phone via QR, laptop) with split/full profiles. (next)
+- **Phase 3** — Clients (phone via QR, laptop) with split/full profiles. (phone done; laptop next)
 - **Phase 4** — Verification and tests.
 - **Phase 5** — Robustness (DNS, auto-recovery, backups).
 
