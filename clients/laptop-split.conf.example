@@ -1,0 +1,46 @@
+# Laptop — SPLIT tunnel profile
+#
+# Only home-bound traffic goes through the tunnel; everything else keeps using the
+# local connection. Use this to reach home services while away.
+#
+# Install as /etc/wireguard/casa-split.conf with permissions 600.
+# Bring up with:  sudo wg-quick up casa-split
+#
+# NEVER commit the real file: it contains the private key.
+
+[Interface]
+Address = 10.10.0.12/32
+PrivateKey = <LAPTOP_PRIVATE_KEY>
+
+# No DNS directive here on purpose: normal traffic still uses the local connection,
+# so the system resolver is fine. See laptop-full.conf.example for the full-tunnel
+# case, where DNS must be handled explicitly.
+
+[Peer]
+PublicKey = <VPS_PUBLIC_KEY>
+Endpoint = <VPS_PUBLIC_IP>:51820
+
+# Route only the VPN network and the home LAN into the tunnel.
+# This is what makes it a "split" tunnel.
+AllowedIPs = 10.10.0.0/24, <HOME_LAN_SUBNET>
+
+# Keep the NAT mapping alive so the tunnel stays reachable while idle.
+PersistentKeepalive = 25
+
+# --- Notes ---
+#
+# Testing from inside the home network is misleading: the machine already has a direct
+# route to <HOME_LAN_SUBNET>, which overlaps with the AllowedIPs above. Test this
+# profile from an external network (mobile data / another Wi-Fi).
+#
+# The home LAN subnet must differ from the network you connect from, otherwise routes
+# collide (e.g. a hotel Wi-Fi using the same subnet). Picking an uncommon subnet at
+# home avoids this.
+#
+# Verify after bringing it up:
+#   sudo wg show                 # 'latest handshake' should be recent
+#   ping -c 3 10.10.0.1          # the VPS over the VPN
+#   ping -c 3 <HOME_ROUTER_IP>   # a home device, ttl=63 means it went via the Pi
+#
+# Check that the key in this file matches the peer registered on the VPS:
+#   sudo grep PrivateKey /etc/wireguard/casa-split.conf | cut -d' ' -f3 | wg pubkey
