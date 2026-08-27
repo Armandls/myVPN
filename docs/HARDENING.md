@@ -135,8 +135,41 @@ sudo fail2ban-client status sshd
 
 ## 6. Non-root user
 The cloud image default admin user already has sudo. No extra user created.
-Note: cloud images ship `NOPASSWD` sudo for that user; kept as is since the strong
-barrier is the SSH key + passphrase and `PermitRootLogin no`.
+
+### Note on `sudo` without a password
+Cloud images ship a `NOPASSWD` sudo rule for their default user (typically in
+`/etc/sudoers.d/90-cloud-init-users`). The reason is that these images have no user
+password at all — access is key-only — so a password prompt would make `sudo` unusable.
+
+This was deliberately left as is. The trade-off:
+
+- **In favour of keeping it**: the real barrier is the SSH key protected by a
+  passphrase, combined with `PermitRootLogin no` and password authentication disabled.
+  Someone without the private key cannot reach a shell in the first place.
+- **Against**: any process running as that user can escalate to root with no further
+  check. Requiring a password would add a layer of defence in depth.
+
+For a personal VPS reached only through a passphrase-protected key, the convenience is
+a reasonable choice. To harden it further, set a real password for the user and remove
+the `NOPASSWD` rule (always editing sudoers with `visudo`).
+
+### Note on remote editors and `TERM`
+Terminal emulators with non-standard `TERM` values (for example kitty, which sets
+`TERM=xterm-kitty`) break ncurses programs on remote hosts that lack the matching
+terminfo entry, with errors such as `Error opening terminal: xterm-kitty`.
+
+One-off workaround:
+```
+sudo TERM=xterm-256color nano <file>
+```
+
+Permanent fix, run from the local machine — note it must be installed system-wide
+(with `sudo`) so that root also finds it:
+```
+infocmp -x xterm-kitty | ssh <HOST> 'sudo tic -x -'
+```
+`tic` prints a harmless warning about the description field. See
+[TROUBLESHOOTING.md](TROUBLESHOOTING.md) issue 4.
 
 ---
 
@@ -170,3 +203,9 @@ FORWARD + MASQUERADE rules live in `wg0.conf` (`PostUp`/`PostDown`), managed by
 - [x] Step C — fail2ban active and verified.
 - [x] Step D — non-root sudo user.
 - [x] Firewall Level B — default DROP + rules, persisted and verified across reboot.
+
+## Related documents
+- [SETUP.md](SETUP.md) — WireGuard setup commands.
+- [TROUBLESHOOTING.md](TROUBLESHOOTING.md) — the SSH issues hit here are documented as
+  issues 1 to 5.
+- [OPERATIONS.md](OPERATIONS.md) — ongoing maintenance.
