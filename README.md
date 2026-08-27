@@ -41,20 +41,36 @@ configuration templates. It is a learning / portfolio project.
 
 Hub-and-spoke topology: all peer traffic flows through the VPS.
 
+## Documentation
+
+| Document | What it covers |
+|---|---|
+| [docs/PLAN.md](docs/PLAN.md) | Design and architecture: the phases and the reasoning behind each decision |
+| [docs/SETUP.md](docs/SETUP.md) | Every command used to build it, with an explanation of what each one does |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | 10 real problems hit along the way: symptom, root cause, fix, lesson |
+| [docs/OPERATIONS.md](docs/OPERATIONS.md) | Day-to-day usage: switching profiles, health checks, adding devices |
+| [docs/HARDENING.md](docs/HARDENING.md) | VPS SSH hardening and firewall |
+
 ## Repository layout
 
 ```
 .
 ├── README.md
 ├── docs/
-│   ├── PLAN.md        # full project plan and phases
-│   └── HARDENING.md   # VPS SSH hardening steps
+│   ├── PLAN.md              # design and phases
+│   ├── SETUP.md             # all commands, explained
+│   ├── TROUBLESHOOTING.md   # real problems and fixes
+│   ├── OPERATIONS.md        # daily usage
+│   └── HARDENING.md         # SSH hardening and firewall
 ├── vps/
 │   └── wg0.conf.example
 ├── raspberry/
 │   └── wg0.conf.example
 └── clients/
-    └── client.conf.example
+    ├── client.conf.example
+    ├── laptop-split.conf.example
+    ├── laptop-full.conf.example
+    └── phone-notes.md
 ```
 
 ## Tech stack
@@ -63,15 +79,30 @@ Hub-and-spoke topology: all peer traffic flows through the VPS.
 - **iptables** for NAT/MASQUERADE and a default-DROP firewall.
 - **systemd** (`wg-quick@wg0`) for auto start; `ssh.socket` for the SSH port.
 - **fail2ban** + SSH hardening (key-only, non-default port).
+- **openresolv** for DNS inside the tunnel on the Linux client.
 
 ## Phases
 
 - **Phase 0** — Provision and harden the VPS. (done — see `docs/HARDENING.md`)
 - **Phase 1** — VPS as WireGuard hub. (done)
 - **Phase 2** — Raspberry Pi reverse tunnel + LAN gateway. (done)
-- **Phase 3** — Clients (phone via QR, laptop) with split/full profiles. (phone done; laptop next)
-- **Phase 4** — Verification and tests.
-- **Phase 5** — Robustness (DNS, auto-recovery, backups).
+- **Phase 3** — Clients (phone, laptop) with split/full profiles. (done)
+- **Phase 4** — Verification and tests. (done)
+- **Phase 5** — Robustness (own DNS resolver, auto-recovery, backups). (planned)
+
+## Results
+
+All the original goals are met and verified:
+
+| Goal | Verified by |
+|---|---|
+| Reach the whole home LAN from outside | ping to a home device replies with `ttl=63`, proving it was routed through the Pi |
+| Exit to the internet via the VPS IP | `curl -4 ifconfig.me` returns the VPS public IP with the FULL profile |
+| No ports opened on the home router | the Pi keeps an outbound tunnel alive with `PersistentKeepalive` |
+| Switchable split / full profiles | two profiles per client, one active at a time |
+| Survives reboots | tunnels come back automatically on VPS, Pi and laptop |
+| No IPv6 leaks in full tunnel | `curl -6 ifconfig.me` fails while the tunnel is up |
+
 
 ## Security notes
 
