@@ -51,7 +51,7 @@ Hub-and-spoke topology: all peer traffic passes through the VPS.
 
 ---
 
-## Phase 0 — Provision the VPS
+## Phase 0 — Provision the VPS — DONE
 - **Minimum specs**: 1 vCPU, 1 GB RAM, ~10-20 GB disk.
 - **What matters**: good bandwidth / monthly traffic (full tunnel = all your
   internet goes through here) and low latency (VPS close to you).
@@ -91,28 +91,28 @@ Hub-and-spoke topology: all peer traffic passes through the VPS.
 > The home LAN must be **different** from the network you connect from (avoid route
 > conflicts, e.g. a hotel Wi-Fi on the same subnet).
 
-> **Gotcha (route to the LAN):** adding a peer with `wg set` registers its
-> `allowed-ips` but does NOT create the kernel route to the LAN subnet. Reaching the
-> home LAN from the VPS then fails (100% packet loss). Fix: bring the peer in via
-> `wg-quick` (e.g. `systemctl restart wg-quick@wg0`), which creates the route from the
-> peer's `AllowedIPs` and makes it persistent. A `ttl=63` on the VPS→router ping (one
-> hop less than 64) confirms traffic is routed through the Pi.
+> Two issues were hit in this phase — a missing `iptables` binary on the Pi, and the
+> LAN route not being created when adding the peer with `wg set`. Both are documented
+> in [TROUBLESHOOTING.md](TROUBLESHOOTING.md) (issues 7 and 8).
 
-> **Gotcha (iptables on the Pi):** recent Raspberry Pi OS ships nftables and lacks the
-> `iptables` binary, so `wg-quick` PostUp fails with `iptables: command not found`.
-> Fix: `sudo apt install iptables`.
-
-## Phase 3 — Clients (phone and laptop)
-1. Generate a key pair for each client.
+## Phase 3 — Clients (phone and laptop) — DONE
+1. Generate a key pair for each client (on the device itself, so no private key travels).
 2. Add its `[Peer]` on the VPS (`AllowedIPs = 10.10.0.11/32`, etc.).
 3. Two profiles per client (the "switchable" part):
    - **SPLIT** (home LAN only): `AllowedIPs = 10.10.0.0/24, <HOME_LAN_SUBNET>`.
    - **FULL** (everything through the VPS): `AllowedIPs = 0.0.0.0/0`.
    - Both with `Endpoint = <VPS_PUBLIC_IP>:51820` and optional `DNS`.
-4. **Phone**: generate a QR code per profile for the WireGuard app.
-5. **Laptop**: import the `.conf` file.
+4. **Phone**: two tunnels in the app sharing one key pair — see
+   [../clients/phone-notes.md](../clients/phone-notes.md).
+5. **Laptop**: two `.conf` files in `/etc/wireguard/`, switched with `wg-quick`.
+   The FULL profile also blocks IPv6 to prevent leaks.
 
-## Phase 4 — Verification and tests
+> Setting up the Linux client hit a chain of three issues (missing `resolvconf`, kernel
+> modules out of sync after an upgrade, and NetworkManager overwriting `resolv.conf`),
+> plus an IPv6 hook ordering problem. All documented in
+> [TROUBLESHOOTING.md](TROUBLESHOOTING.md) (issues 9 and 10).
+
+## Phase 4 — Verification and tests — DONE
 1. **Handshake**: `wg show` with a recent "latest handshake" on each device.
 2. **LAN access**: from the phone (on mobile data) ping/SSH the Pi and another home
    device.
@@ -129,6 +129,13 @@ Hub-and-spoke topology: all peer traffic passes through the VPS.
 - **Backup** of `.conf` files (without exposing private keys).
 
 ---
+
+## Related documents
+
+- [SETUP.md](SETUP.md) — every command used, with explanations.
+- [TROUBLESHOOTING.md](TROUBLESHOOTING.md) — real problems, root causes and fixes.
+- [OPERATIONS.md](OPERATIONS.md) — day-to-day usage.
+- [HARDENING.md](HARDENING.md) — VPS SSH hardening and firewall.
 
 ## What you learn
 Key pairs, the hub-and-spoke model, `AllowedIPs` as routes+filter, kernel IP
