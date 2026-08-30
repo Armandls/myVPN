@@ -50,6 +50,7 @@ Hub-and-spoke topology: all peer traffic flows through the VPS.
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | 10 real problems hit along the way: symptom, root cause, fix, lesson |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Day-to-day usage: switching profiles, health checks, adding devices |
 | [docs/HARDENING.md](docs/HARDENING.md) | VPS SSH hardening and firewall |
+| [docs/HOMELAB.md](docs/HOMELAB.md) | Self-hosted services on the Pi: storage, Docker, and what runs on top |
 
 ## Repository layout
 
@@ -61,7 +62,8 @@ Hub-and-spoke topology: all peer traffic flows through the VPS.
 │   ├── SETUP.md             # all commands, explained
 │   ├── TROUBLESHOOTING.md   # real problems and fixes
 │   ├── OPERATIONS.md        # daily usage
-│   └── HARDENING.md         # SSH hardening and firewall
+│   ├── HARDENING.md         # SSH hardening and firewall
+│   └── HOMELAB.md           # self-hosted services on the Pi
 ├── vps/
 │   └── wg0.conf.example
 ├── raspberry/
@@ -80,6 +82,7 @@ Hub-and-spoke topology: all peer traffic flows through the VPS.
 - **systemd** (`wg-quick@wg0`) for auto start; `ssh.socket` for the SSH port.
 - **fail2ban** + SSH hardening (key-only, non-default port).
 - **openresolv** for DNS inside the tunnel on the Linux client.
+- **Docker + Compose** for the self-hosted services on the Pi.
 
 ## Phases
 
@@ -89,6 +92,7 @@ Hub-and-spoke topology: all peer traffic flows through the VPS.
 - **Phase 3** — Clients (phone, laptop) with split/full profiles. 
 - **Phase 4** — Verification and tests. 
 - **Phase 5** — Robustness.
+- **Phase 6** — Homelab services on the Pi, reachable only through the VPN.
 
 ## Results
 
