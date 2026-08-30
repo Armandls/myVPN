@@ -7,6 +7,11 @@
 # Allow templates explicitly
 !*.conf.example
 
+# Service secrets (docker-compose env files)
+.env
+*.env
+!*.env.example
+
 # Backups / temporary
 *.bak
 *.orig
