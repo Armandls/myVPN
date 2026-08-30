@@ -62,10 +62,10 @@ ssh_pwauth: false
 Custom hardening file:
 ```
 # file: /etc/ssh/sshd_config.d/99-hardening.conf
-PasswordAuthentication no
-PermitRootLogin no
-PubkeyAuthentication yes
-KbdInteractiveAuthentication no
+PasswordAuthentication no  # Don't accept a normal account password over SSH
+PermitRootLogin no  # Don't allow the root account to log in via SSH
+PubkeyAuthentication yes  # Allow SSH key authentication
+KbdInteractiveAuthentication no  # Don't allow keyboard-interactive authentication
 ```
 
 Apply and verify:
@@ -196,13 +196,6 @@ FORWARD + MASQUERADE rules live in `wg0.conf` (`PostUp`/`PostDown`), managed by
 `wg-quick`.
 
 ---
-
-## Hardening status
-- [x] Step A — SSH password/root login disabled.
-- [x] Step B — SSH port changed (IPv4+IPv6).
-- [x] Step C — fail2ban active and verified.
-- [x] Step D — non-root sudo user.
-- [x] Firewall Level B — default DROP + rules, persisted and verified across reboot.
 
 ## Related documents
 - [SETUP.md](SETUP.md) — WireGuard setup commands.
