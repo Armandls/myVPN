@@ -173,30 +173,6 @@ infocmp -x xterm-kitty | ssh <HOST> 'sudo tic -x -'
 
 ---
 
-## Firewall (iptables) — Level B: default DROP
-Base security rules persisted with `iptables-persistent` (independent of WireGuard):
-```
-sudo apt install iptables-persistent -y
-
-sudo iptables -A INPUT -i lo -j ACCEPT
-sudo iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-sudo iptables -A INPUT -p tcp --dport <SSH_PORT> -j ACCEPT     # SSH
-sudo iptables -A INPUT -p udp --dport 51820 -j ACCEPT          # WireGuard
-sudo iptables -A INPUT -p icmp --icmp-type echo-request -j ACCEPT   # ping
-
-# Only after verifying SSH still works in another terminal:
-sudo iptables -P INPUT DROP
-
-sudo netfilter-persistent save
-```
-> Golden rule: add all ACCEPT rules and verify SSH BEFORE switching the policy to
-> DROP, otherwise you lock yourself out. Keep one SSH session open as a safety net.
-
-FORWARD + MASQUERADE rules live in `wg0.conf` (`PostUp`/`PostDown`), managed by
-`wg-quick`.
-
----
-
 ## Related documents
 - [SETUP.md](SETUP.md) — WireGuard setup commands.
 - [TROUBLESHOOTING.md](TROUBLESHOOTING.md) — the SSH issues hit here are documented as
