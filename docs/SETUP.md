@@ -66,8 +66,6 @@ reboot. Files here are re-applied at every boot. The `99-` prefix means it loads
 so it wins over provider defaults. `sysctl --system` applies everything immediately
 without rebooting.
 
-Note: the parameter is `net.ipv4.ip_forward`, not `ip_forwarding`.
-
 ## 1.3 Generate the VPS key pair
 
 ```bash
