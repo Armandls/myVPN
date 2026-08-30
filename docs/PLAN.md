@@ -128,11 +128,40 @@ Hub-and-spoke topology: all peer traffic passes through the VPS.
   commands.
 - **Backup** of `.conf` files (without exposing private keys).
 
+## Phase 6 — Homelab services on the Pi
+
+With the VPN working, the Pi becomes a private server: services run on it and are
+reachable **only through the tunnel**, with nothing exposed to the internet.
+
+Foundation (done — see [HOMELAB.md](HOMELAB.md)):
+1. External USB disk formatted ext4 and mounted at `/mnt/storage` (by UUID, `nofail`).
+   Databases and container volumes must not live on the microSD, which wears out under
+   constant small writes.
+2. Docker + Compose installed with `data-root` on the external disk.
+
+Planned services, in dependency order:
+3. **Pi-hole + Unbound** — DNS with ad blocking plus recursive resolution against the
+   root servers. Pointing the client profiles at the Pi (`DNS = 10.10.0.2`) makes ad
+   blocking work away from home over mobile data, and removes the dependency on a
+   third-party resolver. This also closes the "own DNS resolver" item from Phase 5.
+4. **Caddy** — reverse proxy with internal HTTPS, so services get names instead of
+   `10.10.0.2:<port>`. Required by Vaultwarden.
+5. **Vaultwarden** — password manager, Bitwarden-compatible clients.
+6. **restic** — encrypted backups to the VPS, set up *before* storing anything critical.
+7. **Uptime Kuma** — monitoring and alerts.
+8. **Immich** — photo library with local ML.
+9. **Syncthing** or **Nextcloud** — file sync / private cloud.
+
+Design constraint: everything stays behind the VPN. Services must bind only to the LAN
+and VPN interfaces. In particular, a DNS resolver reachable from the internet would be
+abused for amplification attacks.
+
 ---
 
 ## Related documents
 
 - [SETUP.md](SETUP.md) — every command used, with explanations.
+- [HOMELAB.md](HOMELAB.md) — self-hosted services on the Pi.
 - [TROUBLESHOOTING.md](TROUBLESHOOTING.md) — real problems, root causes and fixes.
 - [OPERATIONS.md](OPERATIONS.md) — day-to-day usage.
 - [HARDENING.md](HARDENING.md) — VPS SSH hardening and firewall.
