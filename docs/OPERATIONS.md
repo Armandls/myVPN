@@ -17,12 +17,63 @@ VPN network: `10.10.0.0/24`. Home LAN: `<HOME_LAN_SUBNET>`.
 
 ## Profiles
 
-| Profile | `AllowedIPs` | What it does | When to use |
-|---|---|---|---|
-| SPLIT | `10.10.0.0/24, <HOME_LAN_SUBNET>` | Only home-bound traffic enters the tunnel; normal browsing keeps using the local connection | Reaching home services from outside |
-| FULL | `0.0.0.0/0` | All traffic exits through the VPS public IP | Untrusted / public Wi-Fi |
+| Profile | `AllowedIPs` | DNS | What it does | When to use |
+|---|---|---|---|---|
+| SPLIT | `10.10.0.0/24, <HOME_LAN_SUBNET>` | system default | Only home-bound traffic enters the tunnel; normal browsing keeps using the local connection | Reaching home services from outside |
+| FULL | `0.0.0.0/0` | `10.10.0.2` (Pi-hole) | All traffic exits through the VPS public IP, with DNS filtered by Pi-hole | Untrusted / public Wi-Fi |
 
 Only one profile can be active at a time on a given device.
+
+---
+
+## Homelab services (on the Pi)
+
+Services are defined under `~/homelab/<service>/` and reachable only through the VPN.
+
+```bash
+cd ~/homelab/pihole
+docker compose ps               # status and health
+docker compose logs -f          # follow logs
+docker compose restart          # restart the service
+docker compose pull             # fetch newer images
+docker compose up -d            # apply changes / recreate
+docker compose down             # stop and remove containers
+```
+
+Across all services:
+```bash
+docker ps                       # everything running
+docker stats                    # live CPU / RAM usage
+docker images                   # images on disk
+```
+
+Wait for `(healthy)`, not just `Up`: Pi-hole needs about 20 seconds to initialise its
+database on first start and refuses queries until then.
+
+### Pi-hole
+
+Admin interface: `http://<PI_LAN_IP>:8080/admin`
+
+```bash
+docker exec pihole pihole -g                    # update blocklists
+docker exec pihole pihole -q <domain>           # why was a domain blocked
+docker exec pihole pihole disable 5m            # pause blocking for 5 minutes
+docker exec pihole pihole enable
+```
+
+If a site breaks, `pihole -q` shows which list matched; exceptions can be added from the
+admin interface. Pausing blocking briefly is the quickest way to confirm whether Pi-hole
+is the cause of a problem.
+
+Checking the DNS chain:
+```bash
+dig @<PI_VPN_IP> google.com +short          # full chain
+dig @127.0.0.1 -p 5335 google.com +short    # Unbound alone (run on the Pi)
+dig @<PI_VPN_IP> doubleclick.net +short     # 0.0.0.0 -> filtering works
+```
+
+Reverting to a public resolver if Pi-hole is unavailable: change `DNS` in the client
+profile back to `1.1.1.1` and restart the tunnel. The tunnel itself is unaffected.
 
 ---
 
@@ -162,6 +213,19 @@ sudo apt update && sudo apt upgrade -y
 ```
 After a kernel upgrade, reboot — otherwise new kernel modules cannot be loaded (this
 caused issue 9b in the troubleshooting doc).
+
+**Container updates.** Image versions are pinned on purpose, so updating is deliberate:
+```bash
+cd ~/homelab/<service>
+# edit the image tag in docker-compose.yml, then:
+docker compose pull
+docker compose up -d
+docker compose logs -f          # watch for problems
+docker image prune              # reclaim space from old images
+```
+Persistent data lives in `/mnt/storage/appdata/<service>`, so recreating a container does
+not lose state. Check the upstream release notes first: Pi-hole v5 to v6 renamed every
+environment variable, and a blind update would silently fall back to defaults.
 
 **Firewall rules.** The VPS uses a default-DROP `INPUT` policy persisted with
 `netfilter-persistent`. After changing rules manually:

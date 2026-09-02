@@ -142,11 +142,11 @@ Foundation (done — see [HOMELAB.md](HOMELAB.md)):
    before the disk is mounted.
 3. **Pi-hole + Unbound** — DNS with ad blocking plus recursive resolution against the
    root servers, verified across a reboot.
+4. Full-tunnel client profiles resolving through the Pi (`DNS = 10.10.0.2`), so ad
+   blocking works away from home over mobile data and no third-party resolver is
+   involved. This also closes the "own DNS resolver" item from Phase 5.
 
 Planned, in dependency order:
-4. Point the WireGuard client profiles at the Pi (`DNS = 10.10.0.2`), so ad blocking
-   works away from home over mobile data and no third-party resolver is involved. This
-   also closes the "own DNS resolver" item from Phase 5.
 5. **Caddy** — reverse proxy with internal HTTPS, so services get names instead of
    `10.10.0.2:<port>`. Required by Vaultwarden.
 6. **Vaultwarden** — password manager, Bitwarden-compatible clients.
