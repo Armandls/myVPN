@@ -51,14 +51,14 @@ Hub-and-spoke topology: all peer traffic passes through the VPS.
 
 ---
 
-## Phase 0 — Provision the VPS — DONE
+## Phase 0 — Provision the VPS
 - **Minimum specs**: 1 vCPU, 1 GB RAM, ~10-20 GB disk.
 - **What matters**: good bandwidth / monthly traffic (full tunnel = all your
   internet goes through here) and low latency (VPS close to you).
 - **OS**: Debian 12 or Ubuntu LTS.
 - Requirements: a dedicated public IPv4 + SSH access.
 
-## Phase 1 — Prepare the VPS (hub) — DONE
+## Phase 1 — Prepare the VPS (hub)
 1. SSH hardening (see HARDENING.md).
 2. Install WireGuard (`wireguard-tools`).
 3. Enable IP forwarding (`net.ipv4.ip_forward=1`).
@@ -71,7 +71,7 @@ Hub-and-spoke topology: all peer traffic passes through the VPS.
 6. Firewall: allow **51820/udp** (WireGuard) + the SSH port.
 7. `wg-quick up wg0` + `systemctl enable wg-quick@wg0` (auto start).
 
-## Phase 2 — Configure the Raspberry Pi (reverse tunnel + LAN gateway) — DONE
+## Phase 2 — Configure the Raspberry Pi (reverse tunnel + LAN gateway)
 1. Install WireGuard.
 2. Enable IP forwarding (to forward toward the home LAN).
 3. Generate the Pi key pair.
@@ -95,7 +95,7 @@ Hub-and-spoke topology: all peer traffic passes through the VPS.
 > LAN route not being created when adding the peer with `wg set`. Both are documented
 > in [TROUBLESHOOTING.md](TROUBLESHOOTING.md) (issues 7 and 8).
 
-## Phase 3 — Clients (phone and laptop) — DONE
+## Phase 3 — Clients (phone and laptop)
 1. Generate a key pair for each client (on the device itself, so no private key travels).
 2. Add its `[Peer]` on the VPS (`AllowedIPs = 10.10.0.11/32`, etc.).
 3. Two profiles per client (the "switchable" part):
@@ -112,7 +112,7 @@ Hub-and-spoke topology: all peer traffic passes through the VPS.
 > plus an IPv6 hook ordering problem. All documented in
 > [TROUBLESHOOTING.md](TROUBLESHOOTING.md) (issues 9 and 10).
 
-## Phase 4 — Verification and tests — DONE
+## Phase 4 — Verification and tests
 1. **Handshake**: `wg show` with a recent "latest handshake" on each device.
 2. **LAN access**: from the phone (on mobile data) ping/SSH the Pi and another home
    device.
@@ -120,24 +120,12 @@ Hub-and-spoke topology: all peer traffic passes through the VPS.
 4. **Switching**: split vs full changes behavior.
 5. **Reboots**: reboot Pi and VPS; the tunnel re-establishes on its own.
 
-## Phase 5 — Robustness — PARTIAL
-- [x] **DNS**: own resolver. Done in Phase 6 with Pi-hole + Unbound resolving
-      recursively, so the clients no longer depend on a public resolver.
-- [x] **Documentation**: IP map, useful commands and public-key handling are covered in
-      [SETUP.md](SETUP.md) and [OPERATIONS.md](OPERATIONS.md).
-- [ ] **Auto-recovery**: a systemd timer on the Pi that restarts `wg0` if the handshake
-      is lost for too long. Not implemented — in practice `PersistentKeepalive` plus
-      `restart: unless-stopped` have been enough so far.
-- [ ] **Backup**: the manual procedure is documented in
-      [OPERATIONS.md](OPERATIONS.md), but automated encrypted backups (restic to the
-      VPS) are still pending.
-
-## Phase 6 — Homelab services on the Pi
+## Phase 5 — Homelab services on the Pi
 
 With the VPN working, the Pi becomes a private server: services run on it and are
 reachable **only through the tunnel**, with nothing exposed to the internet.
 
-Foundation (done — see [HOMELAB.md](HOMELAB.md)):
+See [HOMELAB.md](HOMELAB.md) for the full write-up.
 1. External USB disk formatted ext4 and mounted at `/mnt/storage` (by UUID, `nofail`).
    Databases and container volumes must not live on the microSD, which wears out under
    constant small writes.
@@ -148,7 +136,7 @@ Foundation (done — see [HOMELAB.md](HOMELAB.md)):
    root servers, verified across a reboot.
 4. Full-tunnel client profiles resolving through the Pi (`DNS = 10.10.0.2`), so ad
    blocking works away from home over mobile data and no third-party resolver is
-   involved. This also closes the "own DNS resolver" item from Phase 5.
+   involved.
 
 Planned, in dependency order:
 5. **Caddy** — reverse proxy with internal HTTPS, so services get names instead of
