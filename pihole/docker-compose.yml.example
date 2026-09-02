@@ -1,0 +1,79 @@
+# Pi-hole + Unbound — DNS with ad blocking and recursive resolution
+#
+# Copy to ~/homelab/pihole/docker-compose.yml on the Pi, create a .env alongside it
+# (see .env.example), then run:  docker compose up -d
+#
+# Query flow:
+#   client -> Pi-hole (blocklist check) -> Unbound -> root DNS servers
+#                   \-> 0.0.0.0 if blocked
+
+services:
+  # Recursive resolver. Resolves against the root servers instead of forwarding to a
+  # third party, so no provider sees the full browsing history.
+  unbound:
+    container_name: unbound
+    image: mvance/unbound-rpi:1.22.0
+    # Bridge mode with an explicit mapping: this image listens on port 53 INSIDE the
+    # container, so host mode would fight Pi-hole for the host's port 53.
+    # Bound to 127.0.0.1 only, so it is never reachable from the network.
+    ports:
+      - "127.0.0.1:5335:53/udp"
+      - "127.0.0.1:5335:53/tcp"
+    volumes:
+      - /mnt/storage/appdata/unbound:/opt/unbound/etc/unbound/custom
+    restart: unless-stopped
+
+  # Filtering DNS server plus web interface.
+  pihole:
+    container_name: pihole
+    image: pihole/pihole:2026.07.2
+    # Host mode so it automatically listens on every interface of the Pi, including
+    # the LAN and the WireGuard interface, and sees real client IPs.
+    # The Pi has no public IP, so this does not expose DNS to the internet.
+    network_mode: host
+    depends_on:
+      - unbound
+    environment:
+      TZ: ${TZ}
+      # Pi-hole v6 renamed every setting to FTLCONF_*. The old v5 names
+      # (WEBPASSWORD, DNS1...) are silently ignored.
+      FTLCONF_webserver_api_password: ${PIHOLE_PASSWORD}
+      # 8080 keeps 80/443 free for a reverse proxy later on.
+      FTLCONF_webserver_port: "8080"
+      # Upstream is Unbound. Note the '#' separator for the port, not ':'.
+      # Must be quoted, otherwise YAML treats '#' as a comment.
+      FTLCONF_dns_upstreams: "127.0.0.1#5335"
+      FTLCONF_dns_listeningMode: "all"
+      FTLCONF_dns_dnssec: "true"
+    volumes:
+      # Persistent data on the external disk, never on the microSD.
+      - /mnt/storage/appdata/pihole/etc-pihole:/etc/pihole
+    cap_add:
+      # Lets FTL raise its own scheduling priority. Recommended by upstream.
+      - SYS_NICE
+    restart: unless-stopped
+
+# --- Verification ---
+#
+#   docker compose ps                            # both must reach (healthy)
+#   dig @127.0.0.1 -p 5335 google.com +short     # Unbound resolves on its own
+#   dig @127.0.0.1 google.com +short             # full chain works
+#   dig @127.0.0.1 doubleclick.net +short        # 0.0.0.0 -> blocking works
+#   dig @10.10.0.2 google.com +short             # answers on the VPN address
+#
+# Web interface: http://<PI_LAN_IP>:8080/admin
+#
+# Pi-hole takes ~20s on first start to build its database. Queries during that window
+# return "connection refused" — wait for (healthy) before testing.
+#
+# --- Notes ---
+#
+# Two harmless warnings appear in the logs:
+#   "Insufficient permissions to set system time (CAP_SYS_TIME required)"
+#     Pi-hole v6 ships an optional NTP client. Not needed; the host already syncs time.
+#   "No memory limit support / No swap limit support"
+#     cgroup memory controller not enabled in the kernel cmdline. Only matters when
+#     limiting a container's RAM.
+#
+# Do NOT point the Pi's own /etc/resolv.conf at Pi-hole: if the container fails, the
+# host would lose DNS entirely and could not even pull images to fix it.
