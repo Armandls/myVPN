@@ -80,7 +80,7 @@ extra peer.
 | Name | `Home-FULL` |
 | Private key | same as the SPLIT tunnel |
 | Addresses | `10.10.0.11/32` |
-| DNS servers | `1.1.1.1` |
+| DNS servers | `10.10.0.2` |
 
 **Peer**
 
@@ -96,8 +96,13 @@ extra peer.
 - **SPLIT**: normal traffic still uses mobile data with the carrier's resolver, so
   nothing needs changing.
 - **FULL**: everything goes through the tunnel, DNS included. Without an explicit
-  resolver, queries could leak or stop resolving. Setting `1.1.1.1` keeps DNS inside
-  the tunnel.
+  resolver, queries could leak or stop resolving.
+
+`10.10.0.2` is the Pi's address inside the VPN, where Pi-hole listens. Queries therefore
+travel through the tunnel and are filtered by Pi-hole and resolved by Unbound, which
+means **ad blocking works on mobile data, away from home, with no app installed** — and
+no public resolver sees the browsing history. Use a public resolver such as `1.1.1.1`
+instead if Pi-hole is not deployed.
 
 ## 5. Testing
 
@@ -114,6 +119,8 @@ Checks with SPLIT active:
 Checks with FULL active:
 - Visit any "what is my IP" page — it must show the **VPS** public IP, not the
   carrier's.
+- Browse a site with ads — they should be blocked by Pi-hole, over mobile data, with no
+  app installed on the phone.
 
 On the VPS, confirm the handshake:
 ```bash
@@ -122,3 +129,7 @@ sudo wg show
 The phone peer should show a recent `latest handshake` and growing `transfer`. Its
 `endpoint` will be the carrier's public address, which confirms the connection is
 coming from outside the home network.
+
+On the Pi, the Pi-hole admin interface (`http://<PI_LAN_IP>:8080/admin`) should list
+queries arriving from the phone's VPN address, proving DNS is travelling through the
+tunnel.
