@@ -288,6 +288,36 @@ They run as two containers rather than one because each is a separate concern: t
 be updated independently, a crash in one does not take the other down, and both come
 from images maintained upstream.
 
+### The image does not resolve recursively by default
+
+This is the part worth knowing before trusting the privacy claim above. Despite being
+described upstream as a "validating, recursive, and caching DNS resolver", the
+`mvance/unbound-rpi` image ships a `forward-records.conf` with a `forward-zone` for `"."`
+pointing at Cloudflare over DNS-over-TLS, and its generated config includes it. Out of
+the box the container is a **caching forwarder**, and Cloudflare sees every query.
+
+The fix is to mount an empty file over that path, removing the forward-zone so Unbound
+falls back to native recursion:
+
+```bash
+cat > /mnt/storage/appdata/unbound/forward-records.conf <<'EOF'
+# Intentionally empty: removes the image's forward-zone to Cloudflare.
+EOF
+```
+```yaml
+    volumes:
+      - /mnt/storage/appdata/unbound/forward-records.conf:/opt/unbound/etc/unbound/forward-records.conf:ro
+```
+
+Mount the **file**, not a directory, and over the exact path the image reads
+(`/opt/unbound/etc/unbound/`). Mounting a directory somewhere else is silently inert.
+
+No further configuration is needed: root hints are compiled into Unbound and the image's
+startup script already sets `auto-trust-anchor-file` for DNSSEC.
+
+Full write-up in [TROUBLESHOOTING.md](TROUBLESHOOTING.md) issue 14, including why no
+functional test can catch this.
+
 ### Why the port 53 prerequisite matters
 
 Pi-hole needs UDP/TCP port 53. Verified free on this system before starting:
@@ -377,9 +407,35 @@ dig @127.0.0.1 google.com +short             # full chain
 dig @127.0.0.1 doubleclick.net +short        # 0.0.0.0 → blocking works
 dig @10.10.0.2 google.com +short             # answers on the VPN address
 ```
-`dig` comes from `bind9-dnsutils` (`sudo apt install dnsutils`).
 
-The last check is the important one: it proves WireGuard clients will be able to use it.
+That last check is the one that proves WireGuard clients will be able to use it.
+
+But none of the above distinguishes a recursive resolver from a forwarder — both return
+correct answers. To verify **where the queries actually go**, capture the packets:
+
+```bash
+sudo tcpdump -ni any 'port 853 or port 53' -c 25
+# in another terminal, query a name that cannot be cached:
+dig @127.0.0.1 -p 5335 test-$(date +%s).debian.org
+```
+
+Expected output walks the hierarchy, with no port 853 traffic at all:
+```
+172.18.0.2 > 193.0.14.129.53   A? oRg.         <- k.root-servers.net
+172.18.0.2 > 199.19.56.1.53    A? dEbiaN.org.  <- .org TLD servers
+172.18.0.2 > 199.19.57.1.53    DNSKEY? org.    <- fetching keys to validate
+```
+The mixed case (`A? oRg.`) is DNS-0x20 anti-spoofing, applied only when Unbound resolves
+for itself. Any traffic to port 853 means it is still forwarding.
+
+And confirm DNSSEC is validated locally rather than trusted from upstream:
+```bash
+dig @127.0.0.1 -p 5335 dnssec-failed.org     # must return SERVFAIL
+```
+
+Expect the first lookup of a domain to take a few hundred milliseconds rather than ~0 ms.
+That is the cost of walking the hierarchy instead of reading a third party's warm cache,
+and it amortises as the local cache fills.
 
 Web interface: `http://<PI_LAN_IP>:8080/admin`
 
@@ -424,6 +480,11 @@ The Pi-hole admin interface should also list the clients' VPN addresses among th
 sources.
 
 `dig` is provided by `bind` on Arch and `bind9-dnsutils` on Debian.
+
+> If a handful of sites hang while everything else works, that is an MTU problem in the
+> tunnel, not DNS — see [TROUBLESHOOTING.md](TROUBLESHOOTING.md) issue 15. The
+> distinction: DNS failures stop a connection from starting, MTU failures let it start
+> and then stall.
 
 ### Important: do not point the Pi's own DNS at Pi-hole
 
