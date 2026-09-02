@@ -8,8 +8,14 @@
 #                   \-> 0.0.0.0 if blocked
 
 services:
-  # Recursive resolver. Resolves against the root servers instead of forwarding to a
-  # third party, so no provider sees the full browsing history.
+  # Recursive resolver: resolves from the root servers down, so no third party sees
+  # the queries.
+  #
+  # IMPORTANT: this image does NOT do that out of the box. It ships a
+  # forward-records.conf with a forward-zone for "." pointing at Cloudflare over
+  # DNS-over-TLS, which its generated unbound.conf includes. Overriding that file
+  # with an empty one removes the forward-zone and Unbound falls back to its native
+  # recursive behaviour. See TROUBLESHOOTING.md issue 14.
   unbound:
     container_name: unbound
     image: mvance/unbound-rpi:1.22.0
@@ -20,7 +26,9 @@ services:
       - "127.0.0.1:5335:53/udp"
       - "127.0.0.1:5335:53/tcp"
     volumes:
-      - /mnt/storage/appdata/unbound:/opt/unbound/etc/unbound/custom
+      # Mount the FILE, not the directory: the image reads its config from
+      # /opt/unbound/etc/unbound/, so mounting a directory elsewhere has no effect.
+      - /mnt/storage/appdata/unbound/forward-records.conf:/opt/unbound/etc/unbound/forward-records.conf:ro
     restart: unless-stopped
 
   # Filtering DNS server plus web interface.
@@ -53,6 +61,15 @@ services:
       - SYS_NICE
     restart: unless-stopped
 
+# --- Setup ---
+#
+# Before starting, create the empty override that disables the bundled forwarder:
+#
+#   cat > /mnt/storage/appdata/unbound/forward-records.conf <<'EOF'
+#   # Intentionally empty: removes the image's forward-zone to Cloudflare so
+#   # Unbound resolves recursively from the root servers.
+#   EOF
+#
 # --- Verification ---
 #
 #   docker compose ps                            # both must reach (healthy)
@@ -61,12 +78,31 @@ services:
 #   dig @127.0.0.1 doubleclick.net +short        # 0.0.0.0 -> blocking works
 #   dig @10.10.0.2 google.com +short             # answers on the VPN address
 #
+# Confirm the resolution is genuinely recursive, not forwarded — a functional test
+# cannot tell the difference, only a packet capture can:
+#
+#   sudo tcpdump -ni any 'port 853 or port 53' -c 25
+#   dig @127.0.0.1 -p 5335 test-$(date +%s).debian.org      # in another terminal
+#
+# Expected: UDP/53 queries walking the hierarchy (root servers, then the TLD, then
+# the authoritative servers) and ZERO traffic to port 853. Mixed-case queries such as
+# "A? oRg." are DNS-0x20 anti-spoofing, which Unbound only applies when resolving
+# itself.
+#
+# And that DNSSEC is validated locally:
+#
+#   dig @127.0.0.1 -p 5335 dnssec-failed.org    # must return SERVFAIL
+#
 # Web interface: http://<PI_LAN_IP>:8080/admin
 #
 # Pi-hole takes ~20s on first start to build its database. Queries during that window
 # return "connection refused" — wait for (healthy) before testing.
 #
 # --- Notes ---
+#
+# Recursive resolution is slower on a cold cache (a few hundred ms while Unbound walks
+# the hierarchy) and speeds up as its own cache fills. That is the trade-off for not
+# relying on a third party's cache.
 #
 # Two harmless warnings appear in the logs:
 #   "Insufficient permissions to set system time (CAP_SYS_TIME required)"

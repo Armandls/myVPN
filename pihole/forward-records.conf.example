@@ -1,0 +1,29 @@
+# Intentionally empty — this file exists to be mounted over the one inside the
+# container.
+#
+# The mvance/unbound-rpi image ships a forward-records.conf containing:
+#
+#     forward-zone:
+#         name: "."
+#         forward-tls-upstream: yes
+#         forward-addr: 1.1.1.1@853#cloudflare-dns.com
+#         forward-addr: 1.0.0.1@853#cloudflare-dns.com
+#
+# and its generated unbound.conf includes it:
+#
+#     include: /opt/unbound/etc/unbound/forward-records.conf
+#
+# A forward-zone for "." means "send everything upstream", so out of the box the
+# container is a caching forwarder to Cloudflare over DNS-over-TLS — not a recursive
+# resolver, despite what the name suggests. Cloudflare would see every query.
+#
+# Mounting this empty file over that path removes the forward-zone. With no forwarder
+# configured, Unbound falls back to its native behaviour: full recursive resolution
+# starting at the root servers, with DNSSEC validated locally.
+#
+# Install as /mnt/storage/appdata/unbound/forward-records.conf and mount it read-only:
+#
+#   volumes:
+#     - /mnt/storage/appdata/unbound/forward-records.conf:/opt/unbound/etc/unbound/forward-records.conf:ro
+#
+# Verify with a packet capture, not just a dig: see TROUBLESHOOTING.md issue 14.

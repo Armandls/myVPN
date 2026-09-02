@@ -12,9 +12,16 @@ PostUp   = iptables -A FORWARD -i wg0 -j ACCEPT
 PostUp   = iptables -A FORWARD -o wg0 -j ACCEPT
 # MASQUERADE: exit to the internet through the public interface (full tunnel)
 PostUp   = iptables -t nat -A POSTROUTING -o <PUBLIC_IFACE> -j MASQUERADE
+# MSS clamping: rewrite the MSS advertised in TCP SYNs to fit the tunnel MTU (1420).
+# Without this, sites whose servers ignore Path MTU Discovery send oversized packets
+# that are silently dropped, and their pages hang while other sites load fine.
+PostUp   = iptables -t mangle -A FORWARD -o <PUBLIC_IFACE> -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
+PostUp   = iptables -t mangle -A FORWARD -o wg0 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
 PostDown = iptables -D FORWARD -i wg0 -j ACCEPT
 PostDown = iptables -D FORWARD -o wg0 -j ACCEPT
 PostDown = iptables -t nat -D POSTROUTING -o <PUBLIC_IFACE> -j MASQUERADE
+PostDown = iptables -t mangle -D FORWARD -o <PUBLIC_IFACE> -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
+PostDown = iptables -t mangle -D FORWARD -o wg0 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
 
 # --- Peer: Raspberry Pi ---
 [Peer]
@@ -31,3 +38,20 @@ AllowedIPs = 10.10.0.2/32, <HOME_LAN_SUBNET>
 # [Peer]
 # PublicKey = <LAPTOP_PUBLIC_KEY>
 # AllowedIPs = 10.10.0.12/32
+
+# --- Note on MTU ---
+#
+# The tunnel MTU is 1420 (1500 minus WireGuard's encapsulation overhead). Some servers
+# do not honour Path MTU Discovery — often because ICMP "fragmentation needed" is
+# filtered somewhere along the route — and keep sending 1500-byte packets that cannot
+# fit. Those are dropped without notice, so the connection stalls.
+#
+# The symptom is confusing: most sites work, a few specific ones hang completely, and
+# DNS resolves correctly the whole time, which makes it look like a name resolution
+# problem when it is not. Diagnose by probing with increasing payload sizes:
+#
+#   ping -c1 -M do -s 1372 <target>    # 1400 bytes total: passes
+#   ping -c1 -M do -s 1400 <target>    # 1428 bytes total: fails
+#
+# The MSS clamping rules above are the standard fix. If a stubborn case remains, lower
+# the MTU on the client instead by adding `MTU = 1380` under its [Interface].

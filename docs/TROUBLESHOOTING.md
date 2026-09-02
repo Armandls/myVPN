@@ -18,6 +18,8 @@ cause, the fix, and the lesson. Indexed by symptom so it can be searched quickly
 | [11](#11-two-dns-containers-fighting-over-port-53) | Both DNS containers unreachable, `connection refused` | Docker networking |
 | [12](#12-docker-images-still-on-the-microsd-despite-data-root) | Images on the microSD although `data-root` points elsewhere | Docker storage |
 | [13](#13-containers-vanish-after-a-reboot) | All containers gone after rebooting | Boot ordering |
+| [14](#14-unbound-was-forwarding-to-cloudflare-not-resolving-recursively) | "Recursive" resolver silently forwarding to a third party | DNS privacy |
+| [15](#15-some-sites-hang-while-most-work-fine) | A few specific sites hang; DNS resolves correctly | MTU |
 
 ---
 
@@ -587,6 +589,181 @@ Any service whose data lives on removable or slow-to-appear storage needs an exp
 
 ---
 
+## 14. Unbound was forwarding to Cloudflare, not resolving recursively
+
+**Symptom**
+None. Everything worked. That is what makes this one worth documenting.
+
+`dig` returned correct answers, DNSSEC-signed domains validated, the containers were
+healthy, and every functional check in the deployment guide passed. The setup was
+documented — in six different places — as *"recursive resolution against the root
+servers, so no third party sees the browsing history"*.
+
+That claim was false.
+
+**Root cause**
+The `mvance/unbound-rpi` image is described upstream as a "validating, recursive, and
+caching DNS resolver", but its own README states:
+
+> "By default, forwarders are configured to use Cloudflare DNS."
+
+The image ships `/opt/unbound/etc/unbound/forward-records.conf` containing:
+```
+forward-zone:
+    name: "."
+    forward-tls-upstream: yes
+    forward-addr: 1.1.1.1@853#cloudflare-dns.com
+    forward-addr: 1.0.0.1@853#cloudflare-dns.com
+```
+and its generated `unbound.conf` includes it:
+```
+include: /opt/unbound/etc/unbound/forward-records.conf
+```
+A `forward-zone` for `"."` means "send everything upstream". So the container was a
+caching forwarder to Cloudflare over DNS-over-TLS — an improvement over plaintext DNS,
+but Cloudflare still saw every single query.
+
+Compounding it, the compose file mounted a volume at
+`/opt/unbound/etc/unbound/custom`, a path the image never reads. The mount was inert:
+it looked like configuration was being supplied when nothing was.
+
+**How it was caught**
+Not by any functional test — those cannot tell a forwarder from a resolver, since both
+return correct answers. Only a packet capture can:
+
+```bash
+sudo tcpdump -ni any 'port 853 or port 53' -c 25
+# in another terminal, query a name that cannot be cached:
+dig @127.0.0.1 -p 5335 test-$(date +%s).debian.org
+```
+
+Before the fix, the capture showed a TCP handshake straight to Cloudflare:
+```
+IP 172.18.0.2.51142 > 1.0.0.1.853: Flags [S], seq 1084991559
+                       └─ port 853 = DNS-over-TLS
+```
+
+**Fix**
+Mount an empty file over the bundled one. With no `forward-zone` configured, Unbound
+falls back to its native behaviour: recursion from the root servers, with DNSSEC
+validated locally. No extra configuration is needed — root hints are compiled in, and
+the image's startup script already sets `auto-trust-anchor-file`.
+
+```bash
+cat > /mnt/storage/appdata/unbound/forward-records.conf <<'EOF'
+# Intentionally empty: removes the image's forward-zone to Cloudflare.
+EOF
+```
+```yaml
+    volumes:
+      # Mount the FILE, not a directory, and over the exact path the image reads.
+      - /mnt/storage/appdata/unbound/forward-records.conf:/opt/unbound/etc/unbound/forward-records.conf:ro
+```
+
+**Verification after the fix**
+The same capture now walks the DNS hierarchy, with no port 853 traffic at all:
+```
+172.18.0.2 > 193.0.14.129.53   A? oRg.         <- k.root-servers.net
+172.18.0.2 > 199.19.56.1.53    A? dEbiaN.org.  <- .org TLD servers
+172.18.0.2 > 199.19.57.1.53    DNSKEY? org.    <- fetching keys to validate
+172.18.0.2 > 192.5.5.241.53    A? NET.         <- f.root-servers.net
+```
+Three details confirm it is genuine recursion:
+- Queries go to **root and authoritative servers on port 53**, never to a forwarder.
+- The mixed case (`A? oRg.`) is **DNS-0x20** anti-spoofing, which Unbound only applies
+  when resolving for itself.
+- Answers carry the **`ad` flag** (authenticated data), and `dnssec-failed.org` returns
+  `SERVFAIL` — so signatures are being validated locally rather than trusted from
+  upstream.
+
+Expect the first query for a domain to take a few hundred milliseconds instead of ~0 ms:
+that is the cost of walking the hierarchy rather than reading a third party's warm
+cache. It amortises as the local cache fills.
+
+**Lesson**
+An image's name and tagline are not its configuration. "Recursive resolver" described
+what the software *can* do, not what this container *was doing*.
+
+More broadly: a functional test that passes proves the feature works, not that it works
+the way you claimed. Privacy and security properties are usually invisible to functional
+tests — verifying "no third party sees my queries" required looking at the packets, not
+the answers. Any claim about *where data goes* needs a test that observes where data
+actually goes.
+
+---
+
+## 15. Some sites hang while most work fine
+
+**Symptom**
+With the full tunnel up, most of the internet worked normally, but a few specific sites
+(Netflix, `example.com`) never loaded — the browser just hung. Meanwhile `github.com`
+returned HTTP 200 without issue.
+
+DNS looked like the obvious suspect, and it was not:
+```bash
+dig @127.0.0.1 -p 5335 netflix.com +short
+52.214.181.141
+54.246.79.9                      # resolves fine, status NOERROR
+```
+```bash
+curl -4 --max-time 8 https://www.netflix.com    # HTTP 000  (fails)
+curl -4 --max-time 8 https://github.com         # HTTP 200  (works)
+```
+
+Because this appeared right after changing the DNS resolver (issue 14), it looked like a
+regression from that change. It was not related at all.
+
+**Root cause**
+MTU. The tunnel's MTU is 1420 (1500 minus WireGuard's encapsulation overhead), so
+anything larger cannot pass. Some servers do not honour **Path MTU Discovery** — usually
+because the ICMP "fragmentation needed" messages that signal the correct size are
+filtered somewhere along the route — and keep sending 1500-byte packets. Those are
+dropped silently, so the TLS handshake stalls and the connection hangs rather than
+failing cleanly.
+
+Probing with increasing payload sizes isolates it immediately:
+```bash
+ip link show casa-full | grep -o 'mtu [0-9]*'    # mtu 1420
+
+ping -c1 -M do -s 1200 <target>    # OK
+ping -c1 -M do -s 1372 <target>    # OK    (1400 bytes total)
+ping -c1 -M do -s 1400 <target>    # FAILS (1428 bytes total)
+```
+`-M do` forbids fragmentation, so the packet is dropped instead of being split — which
+is exactly the behaviour to reproduce. The cutoff between 1372 and 1400 points straight
+at the 1420 MTU.
+
+**Fix**
+MSS clamping on the VPS, which rewrites the maximum segment size advertised in TCP SYN
+packets so remote servers never send more than fits:
+```bash
+sudo iptables -t mangle -A FORWARD -o <PUBLIC_IFACE> -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
+sudo iptables -t mangle -A FORWARD -o wg0 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
+```
+Both directions are needed. Make it persistent by adding the rules to `PostUp` in the
+VPS `wg0.conf`, each with its matching `PostDown` using `-D`.
+
+```bash
+curl -4 --max-time 10 https://www.netflix.com    # HTTP 302 -> connection completes
+```
+A 302 is a normal redirect, so TCP and TLS negotiated successfully.
+
+If a stubborn case remains, lower the client MTU instead by adding `MTU = 1380` under
+`[Interface]`. That is blunter and slightly reduces throughput, but it does not depend
+on the server behaving.
+
+**Lesson**
+"A few sites are broken and the rest work" is almost always MTU, never DNS. The
+distinction is that a DNS failure prevents the connection from starting, whereas an MTU
+failure lets it start and then stalls mid-handshake.
+
+Also: correlation is not causation. This surfaced right after a DNS change and looked
+like its regression, but the MTU issue had been latent all along — it only became
+visible when someone happened to visit an affected site. Resisting the obvious
+explanation and testing the transport layer separately was what found it.
+
+---
+
 ## Note on start-up timing
 
 Several of these looked like failures but were just impatience. Pi-hole spends roughly
@@ -631,6 +808,9 @@ Reading the signals:
   `MASQUERADE`, and `ip_forward`.
 - **`Connection refused`** → nothing listening (socket/bind), or a service still starting.
 - **Timeout / 100% loss** → dropped by firewall or no route.
+- **A few sites hang, most work** → MTU, not DNS. Probe with `ping -M do -s <size>`.
+- **Everything works but a privacy claim is unverified** → capture packets. Functional
+  tests cannot tell a forwarder from a recursive resolver.
 - **`ttl` one lower than expected** → traffic crossed an extra hop (working as
   intended when routing through a gateway).
 - **Container `Up` but not answering** → check `healthy` state and its logs; it may still
