@@ -15,6 +15,9 @@ cause, the fix, and the lesson. Indexed by symptom so it can be searched quickly
 | [8](#8-the-vps-cannot-reach-the-home-lan) | 100% packet loss to the home LAN | Routing |
 | [9](#9-full-tunnel-fails-on-arch-three-chained-issues) | `resolvconf: signature mismatch` / `nft: No such file or directory` | Linux client |
 | [10](#10-ipv6-left-disabled-after-a-failed-tunnel-start) | IPv6 stays off after a failed `wg-quick up` | Hooks |
+| [11](#11-two-dns-containers-fighting-over-port-53) | Both DNS containers unreachable, `connection refused` | Docker networking |
+| [12](#12-docker-images-still-on-the-microsd-despite-data-root) | Images on the microSD although `data-root` points elsewhere | Docker storage |
+| [13](#13-containers-vanish-after-a-reboot) | All containers gone after rebooting | Boot ordering |
 
 ---
 
@@ -417,8 +420,188 @@ the tunnel never comes up.
 
 ---
 
+## 11. Two DNS containers fighting over port 53
+
+**Symptom**
+Both Pi-hole and Unbound reported as `Up`, yet neither answered:
+```
+dig @127.0.0.1 -p 5335 google.com
+;; communications error to 127.0.0.1#5335: connection refused
+
+dig @127.0.0.1 google.com
+;; communications error to 127.0.0.1#53: timed out
+```
+
+**Root cause**
+The `mvance/unbound-rpi` image listens on **port 53 inside the container**; it is
+designed to be run in bridge mode with a `5335:53` mapping. Putting it in
+`network_mode: host` made it try to bind the *host's* port 53 — the same port Pi-hole
+needs. Both fought for it and neither ended up serving correctly.
+
+Nothing was listening on 5335 at all, which is what `connection refused` indicated.
+
+**Fix**
+Keep Pi-hole in host mode (it must see every interface and the real client IPs), but run
+Unbound in bridge mode with an explicit mapping:
+```yaml
+  unbound:
+    image: mvance/unbound-rpi:1.22.0
+    ports:
+      - "127.0.0.1:5335:53/udp"
+      - "127.0.0.1:5335:53/tcp"
+```
+Binding to `127.0.0.1` also keeps the recursive resolver unreachable from the network,
+which matters because an open resolver is abused for DNS amplification attacks.
+
+```bash
+docker compose down && docker compose up -d
+dig @127.0.0.1 -p 5335 google.com +short
+```
+
+**Lesson**
+`network_mode: host` is not a drop-in replacement for port mappings. Check which port an
+image listens on internally before switching it to host mode, especially when two
+containers provide the same kind of service.
+
+---
+
+## 12. Docker images still on the microSD despite data-root
+
+**Symptom**
+`data-root` was set to the external disk and `docker info` confirmed it, but the disk was
+nearly empty while images clearly existed:
+```
+docker info | grep "Docker Root Dir"   → /mnt/storage/docker
+sudo du -sh /mnt/storage/docker          → 656K
+docker images                            → ~445 MB of images
+sudo du -sh /var/lib/containerd          → 490M      ← on the microSD
+```
+
+**Root cause**
+Docker 29.x enables the **containerd snapshotter** by default:
+```
+msg="Starting daemon with containerd snapshotter integration enabled"
+storage-driver=overlayfs
+```
+With it, images are stored by **containerd** under `/var/lib/containerd`, outside
+Docker's `data-root`. Setting `data-root` therefore moves volumes and build cache but
+**not the images** — the bulk of the data, and the whole point of using an external disk
+to spare the flash card.
+
+**Fix**
+Move containerd's store as well:
+```bash
+sudo systemctl stop docker.socket docker.service containerd
+sudo mkdir -p /mnt/storage/containerd
+sudo rsync -aHAX --info=progress2 /var/lib/containerd/ /mnt/storage/containerd/
+sudo du -sh /mnt/storage/containerd     # verify the size matches the original
+```
+```bash
+sudo tee /etc/containerd/config.toml > /dev/null <<'EOF'
+version = 2
+root = "/mnt/storage/containerd"
+state = "/run/containerd"
+EOF
+sudo systemctl start containerd docker
+docker images                            # images must still be listed
+```
+Only then reclaim the space:
+```bash
+sudo mv /var/lib/containerd /var/lib/containerd.old
+```
+
+`-H -A -X` on rsync are not optional: containerd depends on hard links and extended
+attributes for image layers.
+
+Keep `state` under `/run` (tmpfs). It is meant to be volatile and writing it to disk
+would add wear for no benefit.
+
+**A mistake worth avoiding**: the rsync destination was mistyped the first time
+(`/mnt/storage/containe`), so 490 MB landed in a stray directory while containerd
+started with an empty store and every image disappeared from `docker images`. The
+give-away was `du` on the intended path reporting a few hundred KB while `df` showed
+500 MB used on the disk. Always confirm with `du -sh` on the destination before starting
+the services.
+
+**Lesson**
+On Docker 29+, `data-root` no longer governs image storage. Verify where the space is
+actually consumed with `du`, rather than trusting a configuration setting.
+
+---
+
+## 13. Containers vanish after a reboot
+
+**Symptom**
+After rebooting the Pi, containers were not just stopped — they were **gone**:
+```
+docker compose ps -a
+NAME  IMAGE  COMMAND  SERVICE  CREATED  STATUS  PORTS
+(empty)
+```
+Docker itself was `active`, the disk was mounted, and DNS queries failed with
+`connection refused`.
+
+**Root cause**
+A boot race. Docker and containerd store their data on an **external USB disk**, which
+takes a moment to be detected and mounted. Both daemons started first, found nothing at
+their configured paths, and initialised an empty store. The `nofail` mount option — which
+correctly prevents a missing disk from blocking the boot — means the system carries on
+regardless.
+
+**Fix**
+Declare the dependency so systemd starts them only after the mount:
+```bash
+sudo mkdir -p /etc/systemd/system/docker.service.d
+sudo tee /etc/systemd/system/docker.service.d/override.conf > /dev/null <<'EOF'
+[Unit]
+RequiresMountsFor=/mnt/storage
+EOF
+
+sudo mkdir -p /etc/systemd/system/containerd.service.d
+sudo tee /etc/systemd/system/containerd.service.d/override.conf > /dev/null <<'EOF'
+[Unit]
+RequiresMountsFor=/mnt/storage
+EOF
+
+sudo systemctl daemon-reload
+```
+`RequiresMountsFor=` makes systemd resolve which mount unit covers that path and treat it
+as a dependency automatically.
+
+Verify with a real reboot:
+```bash
+sudo reboot
+# after reconnecting, with no manual intervention:
+docker compose ps                        # must be Up (healthy)
+sudo du -sh /mnt/storage/containerd      # data still on the disk
+```
+
+**Note on `systemctl edit`**: it may refuse to save with
+`after editing, new contents are empty, not writing file`, which happens when the editor
+exits without writing anything. Writing the override file directly with `tee` avoids the
+problem entirely.
+
+**Lesson**
+Any service whose data lives on removable or slow-to-appear storage needs an explicit
+`RequiresMountsFor`. And a change to boot behaviour is only proven by actually rebooting.
+
+---
+
+## Note on start-up timing
+
+Several of these looked like failures but were just impatience. Pi-hole spends roughly
+20 seconds building its database on first start, and answers `connection refused` until
+it is ready. Check the health state before concluding something is broken:
+```bash
+docker compose ps        # wait for (healthy), not just Up
+docker compose logs -f
+```
+
+---
+
 ## General debugging checklist
 
+VPN:
 ```bash
 sudo wg show                          # handshake, transfer, allowed ips
 ip addr show <iface>                  # is the interface up with the right address
@@ -430,12 +613,27 @@ cat /etc/resolv.conf                  # who owns DNS right now
 curl -4 ifconfig.me                   # which IP the world sees
 ```
 
+Containers and DNS services:
+```bash
+docker compose ps                     # Up AND healthy?
+docker compose logs --tail 50
+sudo ss -tulnp | grep ':53 '          # who actually holds port 53
+dig @127.0.0.1 google.com +short      # does the chain resolve
+dig @127.0.0.1 doubleclick.net +short # 0.0.0.0 means blocking is active
+docker info | grep "Docker Root Dir"
+sudo du -sh /mnt/storage/* /var/lib/containerd   # where the space really is
+```
+
 Reading the signals:
 - **No handshake** → connectivity or key mismatch: check `Endpoint`, UDP 51820 open,
   and that each side has the other's correct public key.
 - **Handshake but no traffic** → routing or NAT: check `AllowedIPs`, `ip route`,
   `MASQUERADE`, and `ip_forward`.
-- **`Connection refused`** → nothing listening (socket/bind).
+- **`Connection refused`** → nothing listening (socket/bind), or a service still starting.
 - **Timeout / 100% loss** → dropped by firewall or no route.
 - **`ttl` one lower than expected** → traffic crossed an extra hop (working as
   intended when routing through a gateway).
+- **Container `Up` but not answering** → check `healthy` state and its logs; it may still
+  be initialising.
+- **Config set but no effect** → verify the actual state (`du`, `ss`, `info`) instead of
+  trusting the configuration file.
