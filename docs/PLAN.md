@@ -137,20 +137,23 @@ Foundation (done — see [HOMELAB.md](HOMELAB.md)):
 1. External USB disk formatted ext4 and mounted at `/mnt/storage` (by UUID, `nofail`).
    Databases and container volumes must not live on the microSD, which wears out under
    constant small writes.
-2. Docker + Compose installed with `data-root` on the external disk.
-
-Planned services, in dependency order:
+2. Docker + Compose installed, with both Docker's `data-root` and containerd's image
+   store moved to the external disk, and `RequiresMountsFor` so neither daemon starts
+   before the disk is mounted.
 3. **Pi-hole + Unbound** — DNS with ad blocking plus recursive resolution against the
-   root servers. Pointing the client profiles at the Pi (`DNS = 10.10.0.2`) makes ad
-   blocking work away from home over mobile data, and removes the dependency on a
-   third-party resolver. This also closes the "own DNS resolver" item from Phase 5.
-4. **Caddy** — reverse proxy with internal HTTPS, so services get names instead of
+   root servers, verified across a reboot.
+
+Planned, in dependency order:
+4. Point the WireGuard client profiles at the Pi (`DNS = 10.10.0.2`), so ad blocking
+   works away from home over mobile data and no third-party resolver is involved. This
+   also closes the "own DNS resolver" item from Phase 5.
+5. **Caddy** — reverse proxy with internal HTTPS, so services get names instead of
    `10.10.0.2:<port>`. Required by Vaultwarden.
-5. **Vaultwarden** — password manager, Bitwarden-compatible clients.
-6. **restic** — encrypted backups to the VPS, set up *before* storing anything critical.
-7. **Uptime Kuma** — monitoring and alerts.
-8. **Immich** — photo library with local ML.
-9. **Syncthing** or **Nextcloud** — file sync / private cloud.
+6. **Vaultwarden** — password manager, Bitwarden-compatible clients.
+7. **restic** — encrypted backups to the VPS, set up *before* storing anything critical.
+8. **Uptime Kuma** — monitoring and alerts.
+9. **Immich** — photo library with local ML.
+10. **Syncthing** or **Nextcloud** — file sync / private cloud.
 
 Design constraint: everything stays behind the VPN. Services must bind only to the LAN
 and VPN interfaces. In particular, a DNS resolver reachable from the internet would be
