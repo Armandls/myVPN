@@ -397,6 +397,34 @@ Setting `DNS = 10.10.0.2` (the Pi's VPN address) in the client profiles routes D
 queries through the tunnel to Pi-hole. The effect: ad blocking on a phone over mobile
 data, away from home, with no app installed — and no dependency on a public resolver.
 
+Applied to the **full-tunnel** profiles only. With a split tunnel, general traffic still
+uses the local connection, so its own resolver is fine.
+
+Laptop:
+```bash
+sudo sed -i 's/^DNS = 1.1.1.1$/DNS = 10.10.0.2/' /etc/wireguard/casa-full.conf
+sudo wg-quick down casa-full; sudo wg-quick up casa-full
+```
+
+Phone: edit the DNS field of the full-tunnel entry in the WireGuard app.
+
+Verify from the client:
+```bash
+cat /etc/resolv.conf           # nameserver 10.10.0.2
+dig doubleclick.net +short     # 0.0.0.0  -> filtered by Pi-hole
+dig google.com +short          # resolves -> answered by Unbound
+curl -4 ifconfig.me            # the VPS public IP
+```
+
+The path a blocked query takes: client asks `10.10.0.2` → the query enters the WireGuard
+tunnel → reaches the VPS → is routed to the Pi → Pi-hole matches it against its
+blocklists. Nothing leaves the setup.
+
+The Pi-hole admin interface should also list the clients' VPN addresses among the query
+sources.
+
+`dig` is provided by `bind` on Arch and `bind9-dnsutils` on Debian.
+
 ### Important: do not point the Pi's own DNS at Pi-hole
 
 Tempting, but it creates a circular dependency: if the container fails, the host loses
@@ -410,7 +438,7 @@ NetworkManager and its usual upstream servers.
 - [x] External disk formatted and mounted at `/mnt/storage` (`nofail`, by UUID).
 - [x] Docker + Compose installed, image store on the external disk.
 - [x] Pi-hole + Unbound, verified across a reboot.
-- [ ] WireGuard client profiles pointing at Pi-hole for DNS.
+- [x] WireGuard full-tunnel profiles resolving DNS through Pi-hole.
 - [ ] Reverse proxy (Caddy) with internal HTTPS.
 - [ ] Vaultwarden (password manager).
 - [ ] Backups (restic to the VPS).
