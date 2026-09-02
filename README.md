@@ -47,7 +47,7 @@ Hub-and-spoke topology: all peer traffic flows through the VPS.
 |---|---|
 | [docs/PLAN.md](docs/PLAN.md) | Design and architecture: the phases and the reasoning behind each decision |
 | [docs/SETUP.md](docs/SETUP.md) | Every command used to build it, with an explanation of what each one does |
-| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | 10 real problems hit along the way: symptom, root cause, fix, lesson |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | 13 real problems hit along the way: symptom, root cause, fix, lesson |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Day-to-day usage: switching profiles, health checks, adding devices |
 | [docs/HARDENING.md](docs/HARDENING.md) | VPS SSH hardening and firewall |
 | [docs/HOMELAB.md](docs/HOMELAB.md) | Self-hosted services on the Pi: storage, Docker, and what runs on top |
@@ -68,6 +68,9 @@ Hub-and-spoke topology: all peer traffic flows through the VPS.
 │   └── wg0.conf.example
 ├── raspberry/
 │   └── wg0.conf.example
+├── pihole/
+│   ├── docker-compose.yml.example
+│   └── .env.example
 └── clients/
     ├── client.conf.example
     ├── laptop-split.conf.example
@@ -83,6 +86,7 @@ Hub-and-spoke topology: all peer traffic flows through the VPS.
 - **fail2ban** + SSH hardening (key-only, non-default port).
 - **openresolv** for DNS inside the tunnel on the Linux client.
 - **Docker + Compose** for the self-hosted services on the Pi.
+- **Pi-hole + Unbound** for DNS filtering with recursive resolution.
 
 ## Phases
 
