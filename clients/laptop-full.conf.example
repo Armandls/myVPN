@@ -15,7 +15,12 @@ PrivateKey = <LAPTOP_PRIVATE_KEY>
 # In a full tunnel EVERYTHING goes through the tunnel, DNS included. Without an
 # explicit resolver, queries could leak to the local network's DNS or fail once the
 # original resolver is no longer reachable. See the DNS note at the bottom.
-DNS = 1.1.1.1
+#
+# Pointing this at the Pi's VPN address sends DNS queries through the tunnel to
+# Pi-hole, so ad blocking works away from home with no app installed, and no public
+# resolver sees the browsing history. Use a public resolver (e.g. 1.1.1.1) instead if
+# Pi-hole is not deployed.
+DNS = 10.10.0.2
 
 # IPv6 leak protection.
 # AllowedIPs = 0.0.0.0/0 only captures IPv4, so on a dual-stack network IPv6 traffic
@@ -47,6 +52,10 @@ PersistentKeepalive = 25
 #   curl -4 ifconfig.me       # must print the VPS public IP
 #   curl -6 ifconfig.me       # must FAIL (IPv6 blocked, no leak)
 #   cat /etc/resolv.conf      # must show the DNS set above
+#   dig doubleclick.net +short   # 0.0.0.0 -> Pi-hole is filtering through the tunnel
+#   dig google.com +short        # resolves normally
+#
+# 'dig' comes from the 'bind' package on Arch (bind9-dnsutils on Debian).
 #
 # After bringing it down, confirm the system was restored:
 #   sysctl net.ipv6.conf.all.disable_ipv6    # back to 0
