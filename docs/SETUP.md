@@ -14,7 +14,6 @@ what each one does and why. All sensitive values are placeholders.
 | `<HOME_LAN_SUBNET>` | Home LAN subnet (e.g. `192.168.x.0/24`) |
 | `<HOME_ROUTER_IP>` | Home router / gateway IP |
 | `<PI_LAN_IP>` | Pi address on the home LAN |
-| `<PI_MAC>` | MAC address of the Pi LAN interface |
 | `<VPS_PUBLIC_KEY>` | WireGuard public key of the VPS |
 | `<PI_PUBLIC_KEY>` | WireGuard public key of the Pi |
 | `<PHONE_PUBLIC_KEY>` | WireGuard public key of the phone |
@@ -69,17 +68,24 @@ without rebooting.
 ## 1.3 Generate the VPS key pair
 
 ```bash
-cd /etc/wireguard
-umask 077
-wg genkey | sudo tee server_private.key
-sudo cat server_private.key | wg pubkey | sudo tee server_public.key
+sudo sh -c 'cd /etc/wireguard && umask 077 && wg genkey | tee server_private.key | wg pubkey > server_public.key'
+sudo ls -l /etc/wireguard/       # both files must be -rw------- (600)
+sudo cat /etc/wireguard/server_public.key
 ```
 
+- `wg genkey` produces a random private key (base64, 44 chars).
+- `wg pubkey` derives the public key from the private one. This is a one-way operation:
+  you can go private → public, never the reverse.
+- `tee` writes the private key to disk **and** passes it down the pipe, so both files
+  are produced in a single pass without the key ever being printed.
 - `umask 077` makes new files `600` (root-only). WireGuard refuses to start if the
   private key is world-readable.
-- `wg genkey` produces a random private key (base64, 44 chars).
-- `wg pubkey` derives the public key from the private one. This is a one-way
-  operation: you can go private → public, never the reverse.
+
+The whole thing runs inside `sudo sh -c '...'` for a reason. `umask` only affects
+processes started by *that* shell, so running it in your own shell and then creating the
+file with `sudo tee` would not apply it — the file would be created under root's umask
+(typically `022`) and end up `0644`: a world-readable private key, exactly what the
+`umask` was supposed to prevent. Always verify with `ls -l` rather than assuming.
 
 Rule to remember: the **private** key never leaves the machine; the **public** key is
 what you copy into the other peer's `[Peer]` block.
@@ -158,6 +164,37 @@ session open as a safety net.
 Why `iptables-persistent` and not `wg0.conf`: SSH access must not depend on the VPN
 being up. If these rules lived in `PostUp` and `wg0` failed to start, you would end up
 with `DROP` active and no SSH rule.
+
+### IPv6 — the rules above do not cover it
+
+`iptables` governs IPv4 only. If the VPS has a public IPv6 address, the IPv6 table is
+still `ACCEPT` by default, so anything bound to `::` is exposed with no filter in front
+of it. That includes SSH: the socket override deliberately listens on `[::]` too.
+
+```bash
+sudo ip6tables -S                              # -P INPUT ACCEPT means wide open
+ip -6 addr show scope global | grep inet6      # is there a public IPv6 at all?
+sudo ss -tlnp | grep '<SSH_PORT>'              # note the [::] line
+```
+
+Mirror the rules:
+```bash
+sudo ip6tables -A INPUT -i lo -j ACCEPT
+sudo ip6tables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+sudo ip6tables -A INPUT -p ipv6-icmp -j ACCEPT
+sudo ip6tables -A INPUT -p tcp --dport <SSH_PORT> -j ACCEPT
+sudo ip6tables -A INPUT -p udp --dport 51820 -j ACCEPT
+
+# again, only after verifying SSH from another terminal:
+sudo ip6tables -P INPUT DROP
+
+sudo netfilter-persistent save     # saves both families
+```
+
+One important difference from IPv4: **ICMPv6 is allowed in full, not just echo-request.**
+Unlike ICMPv4, it is not optional — Neighbor Discovery (IPv6's equivalent of ARP) and
+Path MTU Discovery both depend on it. Filtering ICMPv6 breaks IPv6 in ways that are
+subtle and hard to diagnose.
 
 ## 1.7 Bring the interface up and enable at boot
 

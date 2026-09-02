@@ -27,8 +27,8 @@ cause, the fix, and the lesson. Indexed by symptom so it can be searched quickly
 
 **Symptom**
 ```
-Enter file in which to save the key (/home/user/.ssh/id_ed25519): ~/.ssh/ovh_vps
-Saving key "~/.ssh/ovh_vps" failed: No such file or directory
+Enter file in which to save the key (/home/user/.ssh/id_ed25519): ~/.ssh/vps_key
+Saving key "~/.ssh/vps_key" failed: No such file or directory
 ```
 
 **Root cause**
@@ -159,12 +159,18 @@ LISTEN 0 4096 [::]:<SSH_PORT> [::]:*
 ```
 
 **Root cause**
-The override contained a single `ListenStream=<SSH_PORT>`, which systemd bound to
-IPv6 only. Connections arriving over IPv4 had nothing listening, hence *refused*
-(not a timeout, which would suggest a firewall).
+The override contained a single bare `ListenStream=<SSH_PORT>`, which systemd binds to
+the **IPv6 wildcard** `[::]`. On Linux that normally accepts IPv4 as well, through
+v4-mapped addresses — but only while the socket is not v6-only. Whether it is depends on
+`net.ipv6.bindv6only` and on the unit's `BindIPv6Only=`, whose default (`default`) defers
+to that sysctl. That is why the behaviour looks inconsistent between hosts.
+
+Here the socket ended up v6-only, so connections arriving over IPv4 had nothing
+listening: hence *refused* rather than a timeout, which would instead suggest a firewall
+drop.
 
 **Fix**
-Declare both families explicitly:
+Declare both families explicitly, which removes the ambiguity regardless of the sysctl:
 ```ini
 [Socket]
 ListenStream=
@@ -546,7 +552,7 @@ Docker itself was `active`, the disk was mounted, and DNS queries failed with
 **Root cause**
 A boot race. Docker and containerd store their data on an **external USB disk**, which
 takes a moment to be detected and mounted. Both daemons started first, found nothing at
-their configured paths, and initialised an empty store. The `nofail` mount option — which
+their configured paths, and initialized an empty store. The `nofail` mount option — which
 correctly prevents a missing disk from blocking the boot — means the system carries on
 regardless.
 
@@ -814,6 +820,6 @@ Reading the signals:
 - **`ttl` one lower than expected** → traffic crossed an extra hop (working as
   intended when routing through a gateway).
 - **Container `Up` but not answering** → check `healthy` state and its logs; it may still
-  be initialising.
+  be initializing.
 - **Config set but no effect** → verify the actual state (`du`, `ss`, `info`) instead of
   trusting the configuration file.

@@ -1,9 +1,14 @@
 # VPS SSH Hardening
 
-Record of the securization steps applied to the VPS before setting up WireGuard.
+Record of the hardening steps applied to the VPS before setting up WireGuard.
+
+> The VPS firewall (default-DROP policy for both IPv4 and IPv6) is documented in
+> [SETUP.md](SETUP.md#16-firewall-default-drop-policy), since it is configured
+> alongside WireGuard's own rules.
 
 ## Server details
-- **Provider**: cloud VPS (2 vCore, 4 GB RAM, 40 GB NVMe, unlimited traffic).
+- **Provider**: cloud VPS. This build used 2 vCore, 4 GB RAM, 40 GB NVMe and
+  unmetered traffic; see PLAN.md for the actual minimum requirements.
 - **OS**: Ubuntu LTS.
 - **Public IP (IPv4)**: `<VPS_PUBLIC_IP>`
 - **Admin user**: `<ADMIN_USER>` (with sudo).
@@ -174,7 +179,7 @@ infocmp -x xterm-kitty | ssh <HOST> 'sudo tic -x -'
 ---
 
 ## Related documents
-- [SETUP.md](SETUP.md) — WireGuard setup commands.
+- [SETUP.md](SETUP.md) — WireGuard setup commands, and the VPS firewall (§1.6).
 - [TROUBLESHOOTING.md](TROUBLESHOOTING.md) — the SSH issues hit here are documented as
   issues 1 to 5.
 - [OPERATIONS.md](OPERATIONS.md) — ongoing maintenance.

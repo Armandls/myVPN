@@ -49,7 +49,7 @@ Hub-and-spoke topology: all peer traffic flows through the VPS.
 | [docs/SETUP.md](docs/SETUP.md) | Every command used to build it, with an explanation of what each one does |
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | 13 real problems hit along the way: symptom, root cause, fix, lesson |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Day-to-day usage: switching profiles, health checks, adding devices |
-| [docs/HARDENING.md](docs/HARDENING.md) | VPS SSH hardening and firewall |
+| [docs/HARDENING.md](docs/HARDENING.md) | VPS SSH hardening: key-only auth, custom port, fail2ban |
 | [docs/HOMELAB.md](docs/HOMELAB.md) | Self-hosted services on the Pi: storage, Docker, and what runs on top |
 
 ## Repository layout
@@ -62,7 +62,7 @@ Hub-and-spoke topology: all peer traffic flows through the VPS.
 │   ├── SETUP.md             # all commands, explained
 │   ├── TROUBLESHOOTING.md   # real problems and fixes
 │   ├── OPERATIONS.md        # daily usage
-│   ├── HARDENING.md         # SSH hardening and firewall
+│   ├── HARDENING.md         # SSH hardening
 │   └── HOMELAB.md           # self-hosted services on the Pi
 ├── vps/
 │   └── wg0.conf.example
@@ -72,7 +72,6 @@ Hub-and-spoke topology: all peer traffic flows through the VPS.
 │   ├── docker-compose.yml.example
 │   └── .env.example
 └── clients/
-    ├── client.conf.example
     ├── laptop-split.conf.example
     ├── laptop-full.conf.example
     └── phone-notes.md
@@ -93,8 +92,8 @@ Hub-and-spoke topology: all peer traffic flows through the VPS.
 - **Phase 0** — Provision and harden the VPS.
 - **Phase 1** — VPS as WireGuard hub.
 - **Phase 2** — Raspberry Pi reverse tunnel + LAN gateway.
-- **Phase 3** — Clients (phone, laptop) with split/full profiles. 
-- **Phase 4** — Verification and tests. 
+- **Phase 3** — Clients (phone, laptop) with split/full profiles.
+- **Phase 4** — Verification and tests.
 - **Phase 5** — Robustness.
 - **Phase 6** — Homelab services on the Pi, reachable only through the VPN.
 

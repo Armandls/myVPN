@@ -93,7 +93,7 @@ df -h /mnt/storage
 ### 1.5 Directory layout
 
 ```bash
-sudo mkdir -p /mnt/storage/docker /mnt/storage/appdata
+sudo mkdir -p /mnt/storage/docker /mnt/storage/containerd /mnt/storage/appdata
 sudo chown -R $USER:$USER /mnt/storage/appdata
 ```
 
@@ -202,7 +202,7 @@ operation.
 ### 2.4 Wait for the disk at boot
 
 Both daemons store data on an external USB disk, which takes longer to appear than the
-services take to start. If they start first, they initialise an empty store and every
+services take to start. If they start first, they initialize an empty store and every
 container vanishes.
 
 ```bash

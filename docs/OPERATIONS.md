@@ -47,7 +47,7 @@ docker stats                    # live CPU / RAM usage
 docker images                   # images on disk
 ```
 
-Wait for `(healthy)`, not just `Up`: Pi-hole needs about 20 seconds to initialise its
+Wait for `(healthy)`, not just `Up`: Pi-hole needs about 20 seconds to initialize its
 database on first start and refuses queries until then.
 
 ### Pi-hole
@@ -67,9 +67,9 @@ is the cause of a problem.
 
 Checking the DNS chain:
 ```bash
-dig @<PI_VPN_IP> google.com +short          # full chain
+dig @10.10.0.2 google.com +short            # full chain
 dig @127.0.0.1 -p 5335 google.com +short    # Unbound alone (run on the Pi)
-dig @<PI_VPN_IP> doubleclick.net +short     # 0.0.0.0 -> filtering works
+dig @10.10.0.2 doubleclick.net +short       # 0.0.0.0 -> filtering works
 ```
 
 Reverting to a public resolver if Pi-hole is unavailable: change `DNS` in the client

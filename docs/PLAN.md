@@ -120,13 +120,17 @@ Hub-and-spoke topology: all peer traffic passes through the VPS.
 4. **Switching**: split vs full changes behavior.
 5. **Reboots**: reboot Pi and VPS; the tunnel re-establishes on its own.
 
-## Phase 5 — Robustness (optional, recommended)
-- **DNS**: own resolver or Cloudflare/Quad9 in the profiles.
-- **Auto-recovery**: systemd timer on the Pi that restarts `wg0` if the handshake is
-  lost for too long.
-- **Documentation**: keep an IP map, public keys (NEVER private ones) and useful
-  commands.
-- **Backup** of `.conf` files (without exposing private keys).
+## Phase 5 — Robustness — PARTIAL
+- [x] **DNS**: own resolver. Done in Phase 6 with Pi-hole + Unbound resolving
+      recursively, so the clients no longer depend on a public resolver.
+- [x] **Documentation**: IP map, useful commands and public-key handling are covered in
+      [SETUP.md](SETUP.md) and [OPERATIONS.md](OPERATIONS.md).
+- [ ] **Auto-recovery**: a systemd timer on the Pi that restarts `wg0` if the handshake
+      is lost for too long. Not implemented — in practice `PersistentKeepalive` plus
+      `restart: unless-stopped` have been enough so far.
+- [ ] **Backup**: the manual procedure is documented in
+      [OPERATIONS.md](OPERATIONS.md), but automated encrypted backups (restic to the
+      VPS) are still pending.
 
 ## Phase 6 — Homelab services on the Pi
 
@@ -167,7 +171,7 @@ abused for amplification attacks.
 - [HOMELAB.md](HOMELAB.md) — self-hosted services on the Pi.
 - [TROUBLESHOOTING.md](TROUBLESHOOTING.md) — real problems, root causes and fixes.
 - [OPERATIONS.md](OPERATIONS.md) — day-to-day usage.
-- [HARDENING.md](HARDENING.md) — VPS SSH hardening and firewall.
+- [HARDENING.md](HARDENING.md) — VPS SSH hardening.
 
 ## What you learn
 Key pairs, the hub-and-spoke model, `AllowedIPs` as routes+filter, kernel IP
