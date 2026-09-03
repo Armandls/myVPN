@@ -20,6 +20,7 @@ cause, the fix, and the lesson. Indexed by symptom so it can be searched quickly
 | [13](#13-containers-vanish-after-a-reboot) | All containers gone after rebooting | Boot ordering |
 | [14](#14-unbound-was-forwarding-to-cloudflare-not-resolving-recursively) | "Recursive" resolver silently forwarding to a third party | DNS privacy |
 | [15](#15-some-sites-hang-while-most-work-fine) | A few specific sites hang; DNS resolves correctly | MTU |
+| [16](#16-ipv6-sites-hang-in-full-tunnel-and-a-failed-attempt-to-fix-it-properly) | IPv6-capable sites hang in full tunnel | IPv6 / kill-switch |
 
 ---
 
@@ -770,6 +771,162 @@ explanation and testing the transport layer separately was what found it.
 
 ---
 
+## 16. IPv6 sites hang in full tunnel — and a failed attempt to fix it properly
+
+**Symptom**
+With the full tunnel up, WhatsApp Web, Xataka and other sites never loaded. They did not
+fail — they **hung**, until the request timed out at 10 s. GitHub and plenty of other
+sites worked normally, and DNS resolved everything correctly.
+
+**Root cause**
+`AllowedIPs = 0.0.0.0/0` only captures IPv4, so IPv6 never enters the tunnel. But
+`wg-quick` installs a kill-switch that drops traffic not going through it, so IPv6 is not
+leaked either — it is silently discarded. That is the worst of both worlds:
+
+```bash
+getent ahosts web.whatsapp.com
+2a03:2880:....:....:....  STREAM   # AAAA record comes first
+157.240.x.x               STREAM   # A record
+
+curl -4 --max-time 8 https://www.xataka.com    # 200 in 0.11s
+curl -6 --max-time 8 https://www.xataka.com    # fails
+```
+
+The browser resolves the name, gets an AAAA record, prefers IPv6, tries to connect, and
+the packet is dropped with no ICMP response. So it waits for the full timeout before
+falling back. Sites without AAAA records are unaffected, which is why the failure looks
+arbitrary.
+
+A dual-stack host makes this common: home connections increasingly have native IPv6, and
+most large CDNs publish AAAA records.
+
+### The first fix, and why it was not enough
+
+Disabling IPv6 while the tunnel was up:
+```ini
+PostUp   = sysctl -w net.ipv6.conf.all.disable_ipv6=1
+PostDown = sysctl -w net.ipv6.conf.all.disable_ipv6=0
+```
+This works — until something sets it back to 0 while the tunnel is still up.
+NetworkManager reapplies it on reconnect, `sysctl --system` resets it, and any manual
+recovery undoes it. Then IPv6 is configured and routable again but still dropped by the
+kill-switch, and the hanging returns with no obvious cause.
+
+The flaw is not the value, it is the mechanism: **a global sysctl is shared state that
+anything on the system can change.**
+
+### The second attempt: route IPv6 through the tunnel (this failed)
+
+The textbook answer is not to block IPv6 but to carry it. The VPS has a public IPv6
+address, so the plan was ULA addressing plus NAT66:
+
+```ini
+# VPS
+Address = 10.10.0.1/24, fd42:1a2b:3c4d::1/64
+PostUp  = ip6tables -t nat -A POSTROUTING -o <PUBLIC_IFACE> -j MASQUERADE
+# client
+Address = 10.10.0.12/32, fd42:1a2b:3c4d::12/128
+AllowedIPs = 0.0.0.0/0, ::/0
+```
+
+It applied cleanly — no errors, handshake fine — and then **broke both address families**.
+Not just IPv6: IPv4 stopped working too, so nothing resolved and nothing loaded.
+
+The reason is in `wg-quick` itself:
+```bash
+# /usr/bin/wg-quick, add_default()
+[[ $proto == -4 ]] && [[ $(sysctl -n net.ipv4.conf.all.src_valid_mark) -ne 1 ]] \
+    && cmd sysctl -q net.ipv4.conf.all.src_valid_mark=1
+```
+`src_valid_mark` is what makes fwmark-based policy routing work alongside reverse-path
+filtering, and `wg-quick` only ever sets it **for IPv4**. With `::/0` present it processes
+IPv6 first, installs the v6 kill-switch, and the interaction leaves marked traffic failing
+source validation in both families.
+
+Worth noting what OVH provides here: a single `/128`, with the `/64` on-link rather than
+routed to the instance. Assigning real addresses from it to peers would need NDP proxying
+(`ndppd`), which is its own source of fragility. So NAT66 with ULAs was the only viable
+shape, and that is exactly the configuration that trips over the above.
+
+Reverted.
+
+### The fix that worked
+
+Keep the tunnel IPv4-only, but reject IPv6 through a **dedicated nftables table** instead
+of a global sysctl:
+
+```ini
+PostUp   = nft add table inet wgblock6
+PostUp   = nft add chain inet wgblock6 output { type filter hook output priority 0 \; policy accept \; }
+PostUp   = nft add rule inet wgblock6 output meta nfproto ipv6 oifname != "casa-full" drop
+PostDown = nft delete table inet wgblock6
+```
+
+Why this is better than the sysctl:
+
+| | global sysctl | dedicated nft table |
+|---|---|---|
+| State touched | system-wide | only its own table |
+| Can NetworkManager revert it | **yes** | no |
+| Atomic | no (two separate values) | yes — exists or does not |
+| Cleanup | restore previous values | `delete table`, no residue |
+| After a partial failure | IPv6 left disabled | an inert table, removed on next `down` |
+
+And the behavioural difference that actually fixes the symptom: a **drop rule rejects
+immediately**, so the browser falls back to IPv4 at once rather than waiting out a
+timeout.
+
+The semicolons inside the chain definition must be escaped (`\;`) or `wg-quick` treats
+them as command separators.
+
+**Verification**
+```bash
+curl -4 -s ifconfig.me                     # the VPS IP
+curl -6 -s --max-time 5 ifconfig.me        # fails fast, does not hang
+curl -o /dev/null -w "%{time_total}s\n" https://www.xataka.com       # 0.77s
+curl -o /dev/null -w "%{time_total}s\n" https://web.whatsapp.com     # 1.03s
+```
+After bringing the tunnel down:
+```bash
+sudo nft list tables | grep wgblock6       # gone
+curl -6 -s ifconfig.me                     # native IPv6 restored
+sysctl net.ipv6.conf.all.disable_ipv6      # still 0 — never touched
+```
+
+### A detour worth recording
+
+While debugging this, every request suddenly started returning `000` — including sites
+that had been fine. It looked like the tunnel itself had died, and led to a wrong
+diagnosis.
+
+The tunnel was fine. Isolating the layers showed it immediately:
+```bash
+ping 10.10.0.1     # OK  -> tunnel works
+ping 1.1.1.1       # OK, ttl=49 -> internet through the VPS works
+dig @10.10.0.2     # TIMEOUT -> DNS is the only thing broken
+```
+Pi-hole had restarted moments earlier and was still `health: starting`. With no resolver,
+`curl` cannot resolve anything and reports `000` for every host — which reads exactly
+like a dead tunnel. This is the same start-up timing trap noted at the end of this
+document, walked into a second time.
+
+**Lessons**
+
+Prefer mechanisms that own their state. A global sysctl is shared with the whole system;
+a dedicated firewall table is not. Reversibility and isolation matter more than being the
+most direct way to get a value set.
+
+The "correct" solution is not always the right one. Routing IPv6 through the tunnel is
+architecturally better than blocking it, but on a VPS with a single `/128` and no routed
+prefix it fought the tooling and produced a worse outcome than the pragmatic fix. Trying
+it was still worth it — the constraint is now understood rather than assumed.
+
+Isolate layers before forming a theory. `ping` the tunnel, then an IP on the internet,
+then resolve a name: three commands that place the fault precisely. Guessing from
+`curl` output alone produced two wrong diagnoses in a row.
+
+---
+
 ## Note on start-up timing
 
 Several of these looked like failures but were just impatience. Pi-hole spends roughly
@@ -814,7 +971,10 @@ Reading the signals:
   `MASQUERADE`, and `ip_forward`.
 - **`Connection refused`** → nothing listening (socket/bind), or a service still starting.
 - **Timeout / 100% loss** → dropped by firewall or no route.
-- **A few sites hang, most work** → MTU, not DNS. Probe with `ping -M do -s <size>`.
+- **A few sites hang, most work** → MTU, or IPv6 being dropped rather than leaked.
+  Compare `curl -4` against `curl -6`, and probe MTU with `ping -M do -s <size>`.
+- **Everything returns `000`** → usually no resolver, not a dead tunnel. Isolate:
+  `ping` the tunnel IP, then a public IP, then resolve a name.
 - **Everything works but a privacy claim is unverified** → capture packets. Functional
   tests cannot tell a forwarder from a recursive resolver.
 - **`ttl` one lower than expected** → traffic crossed an extra hop (working as

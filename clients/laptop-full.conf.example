@@ -1,7 +1,7 @@
 # Laptop — FULL tunnel profile
 #
 # All traffic exits through the VPS public IP. Use this on untrusted / public Wi-Fi.
-# Includes IPv6 leak protection.
+# IPv6 is blocked while the tunnel is up, so it can neither leak nor hang.
 #
 # Install as /etc/wireguard/casa-full.conf with permissions 600.
 # Bring up with:  sudo wg-quick up casa-full
@@ -22,19 +22,26 @@ PrivateKey = <LAPTOP_PRIVATE_KEY>
 # Pi-hole is not deployed.
 DNS = 10.10.0.2
 
-# IPv6 leak protection.
-# AllowedIPs = 0.0.0.0/0 only captures IPv4, so on a dual-stack network IPv6 traffic
-# would bypass the tunnel entirely and expose the real address. Disabling IPv6 while
-# the tunnel is up prevents that.
+# IPv6 handling.
+# AllowedIPs = 0.0.0.0/0 only captures IPv4, so IPv6 traffic would bypass the tunnel.
+# But wg-quick's kill-switch drops it instead of letting it leak — which is worse than
+# either option: the browser resolves an AAAA record, tries to connect, and hangs until
+# the timeout expires. Sites with IPv6 (WhatsApp, many CDNs) appear to freeze while
+# IPv4-only sites load fine.
 #
-# These run as PostUp (not PreUp) on purpose: if wg-quick fails earlier (DNS, nftables,
-# a bad key...) it aborts without ever running PostDown, which would leave IPv6
-# disabled system-wide. Running them last means a partial failure never changes global
-# state.
-PostUp   = sysctl -w net.ipv6.conf.all.disable_ipv6=1
-PostUp   = sysctl -w net.ipv6.conf.default.disable_ipv6=1
-PostDown = sysctl -w net.ipv6.conf.all.disable_ipv6=0
-PostDown = sysctl -w net.ipv6.conf.default.disable_ipv6=0
+# The fix is to reject IPv6 explicitly so the browser fails instantly and falls back to
+# IPv4, using a dedicated nftables table rather than a global sysctl:
+#   - Nothing outside this table is touched, so NetworkManager cannot revert it.
+#   - It is atomic: the table either exists or it does not.
+#   - PostDown removes it entirely, leaving no residue.
+#
+# An earlier attempt disabled IPv6 with `sysctl -w net.ipv6.conf.all.disable_ipv6=1`.
+# That works until something re-enables it while the tunnel is still up, and then you
+# are back to the hanging behaviour. See TROUBLESHOOTING.md issue 16.
+PostUp   = nft add table inet wgblock6
+PostUp   = nft add chain inet wgblock6 output { type filter hook output priority 0 \; policy accept \; }
+PostUp   = nft add rule inet wgblock6 output meta nfproto ipv6 oifname != "casa-full" drop
+PostDown = nft delete table inet wgblock6
 
 [Peer]
 PublicKey = <VPS_PUBLIC_KEY>
@@ -50,15 +57,19 @@ PersistentKeepalive = 25
 #
 #   sudo wg show              # 'latest handshake' recent, fwmark present
 #   curl -4 ifconfig.me       # must print the VPS public IP
-#   curl -6 ifconfig.me       # must FAIL (IPv6 blocked, no leak)
+#   curl -6 --max-time 5 ifconfig.me   # must fail FAST (blocked, not hanging)
 #   cat /etc/resolv.conf      # must show the DNS set above
 #   dig doubleclick.net +short   # 0.0.0.0 -> Pi-hole is filtering through the tunnel
 #   dig google.com +short        # resolves normally
 #
 # 'dig' comes from the 'bind' package on Arch (bind9-dnsutils on Debian).
 #
-# After bringing it down, confirm the system was restored:
-#   sysctl net.ipv6.conf.all.disable_ipv6    # back to 0
+# The real test is a browser: sites with AAAA records (WhatsApp Web, most CDNs) must
+# load in under a second or two, not stall.
+#
+# After bringing it down, confirm nothing was left behind:
+#   sudo nft list tables | grep wgblock6     # gone
+#   curl -6 ifconfig.me                      # native IPv6 works again
 #   cat /etc/resolv.conf                     # back to the normal resolvers
 #
 # --- DNS note (Arch / NetworkManager) ---
