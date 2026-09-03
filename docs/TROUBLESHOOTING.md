@@ -927,6 +927,44 @@ then resolve a name: three commands that place the fault precisely. Guessing fro
 
 ---
 
+## Note on removing PostUp rules
+
+A subtle `wg-quick` detail. To stop using a `PostUp` rule, the interface has to be
+brought **down before** its `PostDown` counterpart is deleted from the config.
+
+Deleting both in one edit and then running `systemctl restart` does not work: the restart
+executes the `PostDown` hooks from the **new** file, which no longer contain the delete
+commands. The rules created by the previous version are left **orphaned in the kernel** —
+still active, but with nothing left that knows how to remove them.
+
+```bash
+# wrong: leaves orphaned rules
+edit wg0.conf          # remove PostUp and PostDown together
+systemctl restart wg-quick@wg0
+
+# right
+wg-quick down wg0      # PostDown still present, so it cleans up
+edit wg0.conf
+wg-quick up wg0
+```
+
+If it has already happened, delete them by hand with the matching `-D` and re-save,
+otherwise they come back on the next boot:
+```bash
+sudo ip6tables -t nat -D POSTROUTING -o <PUBLIC_IFACE> -j MASQUERADE
+sudo netfilter-persistent save
+```
+`No chain/target/match by that name` just means that particular rule was already gone.
+
+This showed up after reverting the NAT66 attempt (issue 16): the config file was correct,
+`grep -c ip6tables wg0.conf` returned 0, yet `ip6tables -t nat -L` still listed a
+MASQUERADE rule for `::/0`.
+
+**Lesson:** the code that undoes a change has to outlive the code that made it. Same
+reason `PostDown` exists in the first place.
+
+---
+
 ## Note on start-up timing
 
 Several of these looked like failures but were just impatience. Pi-hole spends roughly
