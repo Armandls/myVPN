@@ -101,6 +101,47 @@ sudo chown -R $USER:$USER /mnt/storage/appdata
 - `/mnt/storage/containerd` — containerd's image store (see 2.3).
 - `/mnt/storage/appdata` — per-service persistent configuration.
 
+### 1.6 USB-SATA bridges: check the driver before trusting the disk
+
+Everything above runs on an external USB disk, so the bridge chipset matters as much as
+the drive itself. Check which driver the kernel picked:
+
+```bash
+lsusb -t                    # look for Driver=uas or Driver=usb-storage
+lsusb                        # note the idVendor:idProduct of the enclosure
+```
+
+**UAS** (USB Attached SCSI) is faster, but several common bridge chipsets are unreliable
+with it on Raspberry Pi and disconnect spontaneously under sustained load. The ASMedia
+`174c:55aa` used here was dropping off the bus several times a day, taking Docker — and
+therefore DNS — down with it.
+
+If the disk disconnects and SMART reports it as healthy, force the conservative driver:
+
+```bash
+sudo cp /boot/firmware/cmdline.txt /boot/firmware/cmdline.txt.bak
+sudo sed -i '1s/^/usb-storage.quirks=174c:55aa:u /' /boot/firmware/cmdline.txt
+cat /boot/firmware/cmdline.txt      # must remain a SINGLE line
+sudo reboot
+```
+
+Substitute your own `vid:pid`. After rebooting:
+```bash
+lsusb -t                                  # Driver=usb-storage
+sudo dmesg -T | grep -i quirk             # "Quirks match for vid ... pid ..."
+```
+
+Monitoring worth doing periodically, since these failures are silent:
+```bash
+sudo dmesg -T | grep -icE "I/O error|USB disconnect"     # should stay at 0
+sudo smartctl -d sat -H /dev/sda                          # -d sat reads through the bridge
+```
+
+Full write-up in [TROUBLESHOOTING.md](TROUBLESHOOTING.md) issue 17.
+
+> For anything holding data that matters, an NVMe HAT on the Pi 5 avoids the USB bridge
+> entirely and is the more robust option.
+
 ---
 
 ## 2. Docker

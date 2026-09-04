@@ -21,6 +21,7 @@ cause, the fix, and the lesson. Indexed by symptom so it can be searched quickly
 | [14](#14-unbound-was-forwarding-to-cloudflare-not-resolving-recursively) | "Recursive" resolver silently forwarding to a third party | DNS privacy |
 | [15](#15-some-sites-hang-while-most-work-fine) | A few specific sites hang; DNS resolves correctly | MTU |
 | [16](#16-ipv6-sites-hang-in-full-tunnel-and-a-failed-attempt-to-fix-it-properly) | IPv6-capable sites hang in full tunnel | IPv6 / kill-switch |
+| [17](#17-the-vpn-keeps-breaking-and-it-was-the-usb-disk-all-along) | DNS dies for hours at a time, apparently at random | Storage / USB |
 
 ---
 
@@ -927,6 +928,136 @@ then resolve a name: three commands that place the fault precisely. Guessing fro
 
 ---
 
+## 17. The VPN keeps breaking — and it was the USB disk all along
+
+**Symptom**
+Three separate occasions over two days where "the VPN stopped working". Sites would not
+load from the laptop; the phone had no connectivity either. Each time the tunnel itself
+was provably fine:
+
+```bash
+sudo wg show          # handshake seconds old, traffic flowing
+ping 10.10.0.1        # 0% loss  -> the VPS is reachable through the tunnel
+ping 1.1.1.1          # 0% loss, ttl=49 -> the internet works through the VPS
+dig @10.10.0.2        # timed out / connection refused  -> DNS is the only failure
+```
+
+Each time the conclusion was "Pi-hole restarted, just wait for it". Each time that was
+the symptom, not the cause.
+
+**Root cause**
+The external USB disk holding all of Docker's data was **physically disconnecting**.
+
+```
+Sep 3 06:33  EXT4-fs error: Detected aborted journal
+             EXT4-fs (sda1): Remounting filesystem read-only
+Sep 4 00:56  EXT4-fs: failed to convert unwritten extents -- potential data loss!
+Sep 4 01:06  usb 2-1: new SuperSpeed USB device number 4      <- reconnected
+Sep 4 02:26  usb 2-1: USB disconnect, device number 4         <- dropped again
+Sep 4 09:46  usb 2-1: new SuperSpeed USB device number 5      <- reconnected
+```
+Three `USB disconnect` events and 37 I/O errors. A `USB disconnect` followed by a
+`new SuperSpeed USB device` is unambiguous: the device left the bus and came back. Not a
+filesystem problem, not a configuration problem — the hardware link dropped.
+
+The dependency chain explains why the symptom looked so unrelated to the cause:
+
+```
+USB disk drops
+  └─> containerd cannot write its metadata database
+       └─> Docker daemon shuts down ("Daemon shutdown complete")
+            └─> Pi-hole container disappears
+                 └─> no DNS resolver
+                      └─> "the VPN is broken"
+```
+
+Docker does not come back on its own after this: the daemon exits cleanly, and
+`restart: unless-stopped` only restarts *containers*, not the daemon that runs them. So
+the system stayed without DNS for **hours** — until a `docker compose ps` typed by hand
+woke the daemon back up through socket activation.
+
+**Isolating it**
+
+SMART reported a perfectly healthy disk, which was the key clue:
+```bash
+sudo smartctl -d sat -a /dev/sda     # -d sat is required to read through a USB bridge
+```
+```
+SMART overall-health: PASSED
+Reallocated_Sector_Ct:  0
+Current_Pending_Sector: 0
+UDMA_CRC_Error_Count:   0      <- the decisive one
+Power_On_Hours:       627
+```
+`UDMA_CRC_Error_Count = 0` means the SATA link between the drive and the enclosure is
+clean. A failing cable or bad signalling would show up here. It did not — so the fault was
+neither the drive nor its internal wiring, leaving the USB-SATA bridge itself.
+
+And the bridge identified itself:
+```bash
+lsusb -t
+# Port 001: Dev 005, Class=Mass Storage, Driver=uas, 5000M
+```
+```
+idVendor=174c, idProduct=55aa    -> ASMedia ASM1051/ASM1153
+```
+That chipset has a long-standing history of spontaneous disconnects under sustained load
+when driven by **UAS** (USB Attached SCSI) on Linux, and `lsusb -t` confirmed `Driver=uas`
+was in use.
+
+**Fix**
+Force the older, more conservative `usb-storage` driver for that specific device via a
+kernel quirk. On Raspberry Pi OS, append to `/boot/firmware/cmdline.txt`:
+
+```
+usb-storage.quirks=174c:55aa:u
+```
+```bash
+sudo cp /boot/firmware/cmdline.txt /boot/firmware/cmdline.txt.bak     # always
+sudo sed -i '1s/^/usb-storage.quirks=174c:55aa:u /' /boot/firmware/cmdline.txt
+cat /boot/firmware/cmdline.txt      # must still be ONE line
+sudo reboot
+```
+The `u` flag means `IGNORE_UAS`. Use `sed` rather than a shell redirect: the file is a
+single line and may contain `;` characters that a shell would interpret.
+
+Verify:
+```bash
+cat /proc/cmdline | grep -o "usb-storage.quirks=[^ ]*"
+lsusb -t                     # must now read Driver=usb-storage
+sudo dmesg -T | grep -i quirk
+# usb-storage 2-1:1.0: Quirks match for vid 174c pid 55aa: c00000
+```
+The `Quirks match` line is the confirmation that the kernel applied it.
+
+Trade-off: slightly lower throughput than UAS. On a 5400 rpm mechanical drive that is
+barely measurable, and stability matters more.
+
+**Lessons**
+
+Follow the dependency chain, not the symptom. "The VPN is broken" was four layers away
+from a USB cable. The layered check — tunnel, then a public IP, then name resolution —
+placed the fault in seconds every time, but on the first two occasions the *next*
+question ("and why is DNS down?") went unasked. Diagnosing the immediate cause is not
+the same as diagnosing the root cause.
+
+A clean SMART report is a positive result, not a dead end. It ruled out the drive and the
+cable in one command, which is what pointed at the bridge chipset.
+
+Check the kernel log before blaming the application. `dmesg` had been recording
+`USB disconnect` and `aborted journal` for two days. Every incident was explained there,
+in plain text, before any of the guesswork started.
+
+Beware silent partial recovery. Docker exiting cleanly is worse than crashing: nothing
+restarts it, no alert fires, and the failure only surfaces when a human happens to notice.
+Something that fails loudly gets fixed; something that fails quietly stays broken.
+
+**Related note:** this is also the strongest argument for a secondary DNS entry in the
+client profiles. With a single resolver, any storage hiccup takes the whole internet down
+from the client's point of view.
+
+---
+
 ## Note on removing PostUp rules
 
 A subtle `wg-quick` detail. To stop using a `PostUp` rule, the interface has to be
@@ -991,9 +1122,18 @@ cat /etc/resolv.conf                  # who owns DNS right now
 curl -4 ifconfig.me                   # which IP the world sees
 ```
 
+Storage (the layer under everything else):
+```bash
+sudo dmesg -T | grep -iE "I/O error|USB disconnect|aborted journal"
+df -h /mnt/storage                    # still mounted?
+sudo smartctl -d sat -H /dev/sda      # drive health through the USB bridge
+lsusb -t                              # which driver: uas or usb-storage
+```
+
 Containers and DNS services:
 ```bash
 docker compose ps                     # Up AND healthy?
+systemctl is-active docker containerd # the daemon itself may be down
 docker compose logs --tail 50
 sudo ss -tulnp | grep ':53 '          # who actually holds port 53
 dig @127.0.0.1 google.com +short      # does the chain resolve
@@ -1013,6 +1153,9 @@ Reading the signals:
   Compare `curl -4` against `curl -6`, and probe MTU with `ping -M do -s <size>`.
 - **Everything returns `000`** → usually no resolver, not a dead tunnel. Isolate:
   `ping` the tunnel IP, then a public IP, then resolve a name.
+- **DNS is down** → do not stop at "the container restarted". Ask *why*:
+  `dmesg -T | grep -iE "I/O error|USB disconnect"` and `systemctl is-active docker`.
+  Storage faults surface as DNS failures four layers up.
 - **Everything works but a privacy claim is unverified** → capture packets. Functional
   tests cannot tell a forwarder from a recursive resolver.
 - **`ttl` one lower than expected** → traffic crossed an extra hop (working as
