@@ -18,3 +18,7 @@
 
 # Contracts / PDFs
 *.pdf
+
+#claude
+CLAUDE.md
+/.claude
