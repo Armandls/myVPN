@@ -310,7 +310,6 @@ ip route | grep <HOME_LAN_SUBNET>     # 'dev wg0' must appear
 ```
 
 Do not use `wg set` for this: it registers the peer but does not create the route.
-See [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
 ## 2.6 Bring up and verify
 

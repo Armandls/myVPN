@@ -7,7 +7,7 @@ managed VPN service involved.
 Working and in daily use.
 
 This repository documents the entire build: every command with the reasoning behind it,
-plus a troubleshooting reference covering the problems hit along the way. Configuration
+plus the reasoning behind each design decision. Configuration
 templates are sanitized; no private keys or personal data are included.
 
 ## What works today
@@ -58,11 +58,10 @@ home.
 | Document | What it covers |
 |---|---|
 | [docs/SETUP.md](docs/SETUP.md) | Every command used to build it, and why each one is needed |
-| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Problems encountered: symptom, root cause, fix |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Day-to-day usage: switching profiles, health checks, adding devices |
 | [docs/PLAN.md](docs/PLAN.md) | Design and architecture: the phases and the reasoning behind each decision |
 | [docs/HARDENING.md](docs/HARDENING.md) | VPS SSH hardening: key-only auth, custom port, fail2ban |
-| [docs/HOMELAB.md](docs/HOMELAB.md) | Self-hosted services on the Pi: storage, Docker, Pi-hole + Unbound |
+| [docs/PIHOLE.md](docs/PIHOLE.md) | Pi-hole + Unbound on the Pi: DNS filtering with recursive resolution |
 
 Configuration templates live in [`vps/`](vps/), [`raspberry/`](raspberry/),
 [`clients/`](clients/) and [`pihole/`](pihole/).
@@ -91,7 +90,7 @@ Configuration templates live in [`vps/`](vps/), [`raspberry/`](raspberry/),
 - The tunnel carries IPv4 only. IPv6 is **blocked** while a full tunnel is active rather
   than left to leak — the VPS has a single `/128` with no routed prefix, so carrying IPv6
   would require NAT66, which conflicts with `wg-quick`'s policy routing. The reasoning is
-  documented in [issue 16](docs/TROUBLESHOOTING.md#16-ipv6-sites-hang-in-full-tunnel-and-a-failed-attempt-to-fix-it-properly).
+  documented in [clients/laptop-full.conf.example](clients/laptop-full.conf.example).
 - Home services are reachable **only through the tunnel** — nothing is exposed to the
   internet.
 

@@ -173,13 +173,10 @@ Permanent fix, run from the local machine — note it must be installed system-w
 ```
 infocmp -x xterm-kitty | ssh <HOST> 'sudo tic -x -'
 ```
-`tic` prints a harmless warning about the description field. See
-[TROUBLESHOOTING.md](TROUBLESHOOTING.md) issue 4.
+`tic` prints a harmless warning about the description field.
 
 ---
 
 ## Related documents
 - [SETUP.md](SETUP.md) — WireGuard setup commands, and the VPS firewall (§1.6).
-- [TROUBLESHOOTING.md](TROUBLESHOOTING.md) — the SSH issues hit here are documented as
-  issues 1 to 5.
 - [OPERATIONS.md](OPERATIONS.md) — ongoing maintenance.

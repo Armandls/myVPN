@@ -1,8 +1,7 @@
 # Operations manual
 
 Day-to-day usage: bringing tunnels up and down, switching profiles, and diagnosing
-problems. For the initial build see [SETUP.md](SETUP.md); for errors see
-[TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+problems. For the initial build see [SETUP.md](SETUP.md).
 
 ## Address map
 
@@ -211,8 +210,8 @@ systemctl is-enabled wg-quick@wg0       # starts at boot?
 ```bash
 sudo apt update && sudo apt upgrade -y
 ```
-After a kernel upgrade, reboot — otherwise new kernel modules cannot be loaded (this
-caused issue 9b in the troubleshooting doc).
+After a kernel upgrade, reboot — otherwise new kernel modules cannot be loaded (for
+example the nftables modules the full-tunnel kill-switch needs).
 
 **Container updates.** Image versions are pinned on purpose, so updating is deliberate:
 ```bash
