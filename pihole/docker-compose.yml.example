@@ -15,7 +15,7 @@ services:
   # forward-records.conf with a forward-zone for "." pointing at Cloudflare over
   # DNS-over-TLS, which its generated unbound.conf includes. Overriding that file
   # with an empty one removes the forward-zone and Unbound falls back to its native
-  # recursive behaviour. See TROUBLESHOOTING.md issue 14.
+  # recursive behaviour. See docs/PIHOLE.md.
   unbound:
     container_name: unbound
     image: mvance/unbound-rpi:1.22.0

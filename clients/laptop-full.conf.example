@@ -37,7 +37,7 @@ DNS = 10.10.0.2
 #
 # An earlier attempt disabled IPv6 with `sysctl -w net.ipv6.conf.all.disable_ipv6=1`.
 # That works until something re-enables it while the tunnel is still up, and then you
-# are back to the hanging behaviour. See TROUBLESHOOTING.md issue 16.
+# are back to the hanging behaviour.
 PostUp   = nft add table inet wgblock6
 PostUp   = nft add chain inet wgblock6 output { type filter hook output priority 0 \; policy accept \; }
 PostUp   = nft add rule inet wgblock6 output meta nfproto ipv6 oifname != "casa-full" drop

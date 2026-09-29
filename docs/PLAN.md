@@ -92,8 +92,8 @@ Hub-and-spoke topology: all peer traffic passes through the VPS.
 > conflicts, e.g. a hotel Wi-Fi on the same subnet).
 
 > Two issues were hit in this phase — a missing `iptables` binary on the Pi, and the
-> LAN route not being created when adding the peer with `wg set`. Both are documented
-> in [TROUBLESHOOTING.md](TROUBLESHOOTING.md) (issues 7 and 8).
+> LAN route not being created when adding the peer with `wg set`. Fix: install the
+> `iptables` package, and restart with `wg-quick` so the route is created.
 
 ## Phase 3 — Clients (phone and laptop)
 1. Generate a key pair for each client (on the device itself, so no private key travels).
@@ -109,8 +109,7 @@ Hub-and-spoke topology: all peer traffic passes through the VPS.
 
 > Setting up the Linux client hit a chain of three issues (missing `resolvconf`, kernel
 > modules out of sync after an upgrade, and NetworkManager overwriting `resolv.conf`),
-> plus an IPv6 hook ordering problem. All documented in
-> [TROUBLESHOOTING.md](TROUBLESHOOTING.md) (issues 9 and 10).
+> plus an IPv6 hook ordering problem.
 
 ## Phase 4 — Verification and tests
 1. **Handshake**: `wg show` with a recent "latest handshake" on each device.
@@ -125,7 +124,7 @@ Hub-and-spoke topology: all peer traffic passes through the VPS.
 With the VPN working, the Pi becomes a private server: services run on it and are
 reachable **only through the tunnel**, with nothing exposed to the internet.
 
-See [HOMELAB.md](HOMELAB.md) for the full write-up.
+Pi-hole + Unbound is documented in [PIHOLE.md](PIHOLE.md).
 1. External USB disk formatted ext4 and mounted at `/mnt/storage` (by UUID, `nofail`).
    Databases and container volumes must not live on the microSD, which wears out under
    constant small writes.
@@ -156,8 +155,7 @@ abused for amplification attacks.
 ## Related documents
 
 - [SETUP.md](SETUP.md) — every command used, with explanations.
-- [HOMELAB.md](HOMELAB.md) — self-hosted services on the Pi.
-- [TROUBLESHOOTING.md](TROUBLESHOOTING.md) — real problems, root causes and fixes.
+- [PIHOLE.md](PIHOLE.md) — Pi-hole + Unbound on the Pi.
 - [OPERATIONS.md](OPERATIONS.md) — day-to-day usage.
 - [HARDENING.md](HARDENING.md) — VPS SSH hardening.
 

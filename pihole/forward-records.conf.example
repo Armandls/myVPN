@@ -26,4 +26,4 @@
 #   volumes:
 #     - /mnt/storage/appdata/unbound/forward-records.conf:/opt/unbound/etc/unbound/forward-records.conf:ro
 #
-# Verify with a packet capture, not just a dig: see TROUBLESHOOTING.md issue 14.
+# Verify with a packet capture, not just a dig: see docs/PIHOLE.md.
