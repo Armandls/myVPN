@@ -72,6 +72,12 @@ Hub-and-spoke topology: all peer traffic passes through the VPS.
 7. `wg-quick up wg0` + `systemctl enable wg-quick@wg0` (auto start).
 
 ## Phase 2 — Configure the Raspberry Pi (reverse tunnel + LAN gateway)
+
+> Before this phase the Pi runs Raspberry Pi OS Lite entirely from NVMe (`/` and
+> `/boot/firmware`), cloned from a microSD with `rpi-clone`. A single durable disk avoids
+> microSD wear and a split-boot second point of failure. See
+> [RASPBERRY-OS.md](RASPBERRY-OS.md).
+
 1. Install WireGuard.
 2. Enable IP forwarding (to forward toward the home LAN).
 3. Generate the Pi key pair.
@@ -158,6 +164,7 @@ abused for amplification attacks.
 - [PIHOLE.md](PIHOLE.md) — Pi-hole + Unbound on the Pi.
 - [OPERATIONS.md](OPERATIONS.md) — day-to-day usage.
 - [HARDENING.md](HARDENING.md) — VPS SSH hardening.
+- [RASPBERRY-OS.md](RASPBERRY-OS.md) — OS install on the Pi and NVMe boot.
 
 ## What you learn
 Key pairs, the hub-and-spoke model, `AllowedIPs` as routes+filter, kernel IP
