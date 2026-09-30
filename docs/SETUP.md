@@ -14,6 +14,8 @@ what each one does and why. All sensitive values are placeholders.
 | `<HOME_LAN_SUBNET>` | Home LAN subnet (e.g. `192.168.x.0/24`) |
 | `<HOME_ROUTER_IP>` | Home router / gateway IP |
 | `<PI_LAN_IP>` | Pi address on the home LAN |
+| `<PI_HOSTNAME>` | Hostname of the Pi, set in Raspberry Pi Imager |
+| `<USER>` | Login user on the Pi, set in Raspberry Pi Imager |
 | `<VPS_PUBLIC_KEY>` | WireGuard public key of the VPS |
 | `<PI_PUBLIC_KEY>` | WireGuard public key of the Pi |
 | `<PHONE_PUBLIC_KEY>` | WireGuard public key of the phone |
@@ -226,6 +228,9 @@ sudo iptables -t nat -L POSTROUTING -n
 The Pi plays two roles: a WireGuard **client** that keeps an outbound tunnel to the
 VPS (so no router ports need opening), and a **gateway** that forwards traffic into
 the home LAN.
+
+This phase assumes Raspberry Pi OS is already installed and booting from the NVMe
+drive, as described in [RASPBERRY-OS.md](RASPBERRY-OS.md).
 
 ## 2.0 Network preparation
 
