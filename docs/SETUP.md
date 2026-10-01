@@ -230,7 +230,7 @@ VPS (so no router ports need opening), and a **gateway** that forwards traffic i
 the home LAN.
 
 This phase assumes Raspberry Pi OS is already installed and booting from the NVMe
-drive, as described in [RASPBERRY-OS.md](RASPBERRY-OS.md).
+drive, with SSH hardened, as described in [RASPBERRY-OS.md](RASPBERRY-OS.md).
 
 ## 2.0 Network preparation
 

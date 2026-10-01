@@ -1,8 +1,12 @@
-# Preparing the Raspberry Pi — OS on NVMe
+# Preparing the Raspberry Pi — OS on NVMe and SSH hardening
 
-How the Raspberry Pi 5 gets its operating system before any VPN or homelab work: install
-Raspberry Pi OS Lite on a microSD card, clone the whole system to an NVMe drive with
-`rpi-clone`, and boot from the NVMe from then on.
+How the Raspberry Pi 5 is prepared before any VPN or homelab work: install Raspberry Pi
+OS Lite on a microSD card, clone the whole system to an NVMe drive with `rpi-clone`, boot
+from the NVMe from then on, and finally harden SSH access to the Pi (key-only login for a
+single user, no root login).
+
+The SSH hardening of the VPS is documented separately in [HARDENING.md](HARDENING.md);
+this document covers its Pi counterpart.
 
 This document follows the same convention as [SETUP.md](SETUP.md): every command is
 listed with an explanation of what it does and why. Placeholders (`<USER>`,
@@ -88,6 +92,29 @@ support. The maintained fork
 [geerlingguy/rpi-clone](https://github.com/geerlingguy/rpi-clone) handles both; version
 2.0.27 was used here.
 
+### SSH settings in our own drop-in file, numbered `40-`
+
+The SSH settings are not edited in the main `/etc/ssh/sshd_config` nor in the
+`50-cloud-init.conf` file that the Imager preconfiguration creates. They go in a separate
+file, `/etc/ssh/sshd_config.d/40-myvpn.conf`:
+
+- **sshd keeps the first value it finds.** For most settings, sshd uses the *first* value
+  it reads and ignores any later one. The exception is the `Allow*`/`Deny*` lists
+  (`AllowUsers`, `DenyUsers`, `AllowGroups`, `DenyGroups`), which are accumulated across
+  files: another drop-in adding its own `AllowUsers` would widen access. The main `sshd_config` includes the files in
+  `sshd_config.d/` at the top, before its own settings, and those files are read in
+  lexical (alphabetical) order. So a file named `40-...` is read before `50-...`, and its
+  values win.
+- **cloud-init sets `PasswordAuthentication yes`.** The Imager settings are applied on
+  first boot by cloud-init, which writes `50-cloud-init.conf` with password login
+  enabled. A file numbered `99-` would be read after it and lose; numbered `40-`, it wins
+  whatever cloud-init writes. On the VPS, [HARDENING.md](HARDENING.md) uses
+  `99-hardening.conf`, which works there only because the competing `50-`/`60-` files
+  were removed and cloud-init was neutralised.
+- **Files managed by cloud-init can be rewritten.** Editing `50-cloud-init.conf` is
+  fragile, because cloud-init may regenerate it. With the `40-` file in place,
+  `50-cloud-init.conf` can stay as it is.
+
 ---
 
 ## Step 1 — Flash Raspberry Pi OS Lite to the microSD
@@ -99,7 +126,8 @@ On the laptop, open **Raspberry Pi Imager** and choose:
 - Storage: the microSD card.
 
 In the OS customisation settings, preconfigure the user `<USER>`, the hostname
-`<PI_HOSTNAME>` and enable **SSH** (public-key authentication preferred). This lets the Pi
+`<PI_HOSTNAME>` and enable **SSH** with password authentication; it is hardened to key-only login in
+[Step 11](#step-11--harden-ssh). This lets the Pi
 be reached over the network on first boot without a screen or keyboard, and these
 settings are carried over to the NVMe by the clone.
 
@@ -314,7 +342,144 @@ Shows the bootloader version currently running and whether a newer one is availa
 confirming the update from step 2 is in place.
 
 Keep the microSD aside: it holds a bootable copy of the freshly installed system and can
-be used as a rescue disk.
+be used as a rescue disk. It was cloned before the SSH hardening of step 11, so it still
+accepts password logins. That only matters to someone with physical access to the Pi,
+but if it is kept, harden it the same way or wipe it.
+
+## Step 11 — Harden SSH
+
+Until now the Pi accepts SSH logins with a password. This step switches it to key-only
+login, for `<USER>` only, with root login disabled. The order matters: the key is
+installed and tested **before** passwords are turned off, so access is never lost.
+
+### 11.1 Generate a key pair on the laptop
+
+```bash
+ssh-keygen -t ed25519 -C "<comment>" -f ~/.ssh/raspberry
+```
+Creates a new key pair dedicated to the Pi, on the laptop.
+
+- `-t ed25519` selects the Ed25519 algorithm: modern, secure and with short keys.
+- `-C "<comment>"` is only a label stored in the public key, to recognise it later (for
+  example in `authorized_keys`). It has no security role.
+- `-f ~/.ssh/raspberry` chooses the file name: the private key is `~/.ssh/raspberry` and
+  the public key `~/.ssh/raspberry.pub`.
+
+`ssh-keygen` then asks for a **passphrase** at an interactive prompt. The passphrase
+encrypts the private key on disk, so a stolen copy of the file is useless without it.
+Type it at the prompt rather than passing it with `-N "..."`: anything written on the
+command line is saved in the shell history.
+
+### 11.2 Copy the public key to the Pi
+
+```bash
+ssh-copy-id -i ~/.ssh/raspberry.pub <USER>@<PI_LAN_IP>
+```
+Appends the public key to `~/.ssh/authorized_keys` of `<USER>` on the Pi, creating the
+file and directory with the correct permissions if needed. It logs in with the password
+to do so, so it must run while password login is still allowed.
+
+### 11.3 Test key login
+
+```bash
+ssh -i ~/.ssh/raspberry -o IdentitiesOnly=yes -o PasswordAuthentication=no <USER>@<PI_LAN_IP>
+```
+Logs in with the new key (asking for its passphrase, not the account password).
+`IdentitiesOnly=yes` makes ssh offer only that key, not keys from an agent or the default
+`~/.ssh/id_*` files, and `PasswordAuthentication=no` stops it falling back to a password.
+So a successful login proves that this specific key works, and passwords can be disabled
+safely. Keep this session open
+for the next steps.
+
+### 11.4 Create the drop-in file
+
+On the Pi, create the file:
+```bash
+sudo nano /etc/ssh/sshd_config.d/40-myvpn.conf
+```
+Opens a new, empty file in the `nano` editor as `root` (the directory is only writable by
+`root`). Write these contents and save:
+```
+# Only <USER> may log in over SSH
+AllowUsers <USER>
+PubkeyAuthentication yes
+PasswordAuthentication no
+PermitRootLogin no
+```
+
+- `AllowUsers <USER>` — only this account may log in over SSH; any other user is
+  rejected even with valid credentials.
+- `PubkeyAuthentication yes` — allows login with a key pair.
+- `PasswordAuthentication no` — rejects password logins, which removes password
+  guessing as an attack.
+- `PermitRootLogin no` — `root` cannot log in over SSH; administration goes through
+  `<USER>` and `sudo`.
+
+Why the file is numbered `40-` is explained in
+[Design decisions](#ssh-settings-in-our-own-drop-in-file-numbered-40-).
+
+```bash
+sudo chmod 600 /etc/ssh/sshd_config.d/40-myvpn.conf
+```
+Makes the file readable (and writable) only by `root`. The default `644` already makes it
+editable only by `root`; `600` also stops other local users from reading it, for example
+to learn which account is in `AllowUsers`. It is not a secret, so this is not strictly
+required; it is kept consistent with `50-cloud-init.conf`.
+
+### 11.5 Check the syntax, then restart
+
+```bash
+sudo sshd -t
+```
+Checks the whole SSH configuration for errors without applying it. It prints nothing
+when everything is correct. Always run it **before** restarting, so sshd is never
+restarted with a broken configuration.
+
+```bash
+sudo systemctl restart ssh
+```
+Restarts the SSH server so it reads the new configuration. On Debian and Raspberry Pi
+OS the unit is called `ssh` (`sshd` is an alias). Restarting does not drop existing
+sessions: keep the current one open until the tests below pass, since it is the way back
+if something is wrong.
+
+### 11.6 Check the effective configuration
+
+```bash
+sudo sshd -T | grep -Ei 'passwordauthentication|pubkeyauthentication|permitrootlogin|allowusers|kbdinteractive'
+```
+`-T` prints the final configuration sshd actually uses, after merging every file (unlike
+`-t`, which only checks syntax). Expected output:
+```
+permitrootlogin no
+pubkeyauthentication yes
+passwordauthentication no
+kbdinteractiveauthentication no
+allowusers <USER>
+```
+`kbdinteractiveauthentication no` is not set in our file: Debian's shipped
+`sshd_config` sets it to `no` (OpenSSH's own default is `yes`). It matters because
+keyboard-interactive is the other way SSH can ask for a password. That line comes
+**after** the `Include` of `sshd_config.d/`, so a drop-in could re-enable it. Adding
+`KbdInteractiveAuthentication no` to `40-myvpn.conf` would pin it, as
+[HARDENING.md](HARDENING.md) does for the VPS; it is not part of the current file.
+
+### 11.7 Test from the laptop
+
+From a **new** terminal on the laptop:
+```bash
+ssh -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive <USER>@<PI_LAN_IP>
+```
+Tries to log in using both password methods, ignoring keys. It must fail with
+`Permission denied (publickey)`. That message is the real proof: the text in parentheses
+is the list of methods the server offers, and here it offers only `publickey`.
+
+```bash
+ssh -i ~/.ssh/raspberry -o IdentitiesOnly=yes -o PasswordAuthentication=no <USER>@<PI_LAN_IP>
+```
+Logs in with that key only, with no password fallback, as in 11.3 (asking for the key's
+passphrase). It must succeed. Only then is it safe
+to close the session that was kept open.
 
 ---
 
@@ -328,3 +493,4 @@ be used as a rescue disk.
 - [SETUP.md](SETUP.md) — the VPN itself, command by command.
 - [PLAN.md](PLAN.md) — phases and design reasoning.
 - [OPERATIONS.md](OPERATIONS.md) — day-to-day usage.
+- [HARDENING.md](HARDENING.md) — SSH hardening of the VPS (the counterpart of step 11).
