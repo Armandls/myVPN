@@ -164,7 +164,7 @@ abused for amplification attacks.
 - [PIHOLE.md](PIHOLE.md) — Pi-hole + Unbound on the Pi.
 - [OPERATIONS.md](OPERATIONS.md) — day-to-day usage.
 - [HARDENING.md](HARDENING.md) — VPS SSH hardening.
-- [RASPBERRY-OS.md](RASPBERRY-OS.md) — OS install on the Pi and NVMe boot.
+- [RASPBERRY-OS.md](RASPBERRY-OS.md) — OS install on the Pi, NVMe boot and SSH hardening.
 
 ## What you learn
 Key pairs, the hub-and-spoke model, `AllowedIPs` as routes+filter, kernel IP
