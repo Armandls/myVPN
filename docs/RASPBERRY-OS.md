@@ -5,8 +5,8 @@ OS Lite on a microSD card, clone the whole system to an NVMe drive with `rpi-clo
 from the NVMe from then on, and finally harden SSH access to the Pi (key-only login for a
 single user, no root login).
 
-The SSH hardening of the VPS is documented separately in [HARDENING.md](HARDENING.md);
-this document covers its Pi counterpart.
+The SSH hardening of the VPS is documented separately in
+[VPS-HARDENING.md](VPS-HARDENING.md); this document covers its Pi counterpart.
 
 This document follows the same convention as [SETUP.md](SETUP.md): every command is
 listed with an explanation of what it does and why. Placeholders (`<USER>`,
@@ -109,7 +109,7 @@ file, `/etc/ssh/sshd_config.d/40-myvpn.conf`:
 - **cloud-init sets `PasswordAuthentication yes`.** The Imager settings are applied on
   first boot by cloud-init, which writes `50-cloud-init.conf` with password login
   enabled. A file numbered `99-` would be read after it and lose; numbered `40-`, it wins
-  whatever cloud-init writes. On the VPS, [HARDENING.md](HARDENING.md) uses
+  whatever cloud-init writes. On the VPS, [VPS-HARDENING.md](VPS-HARDENING.md) uses
   `99-hardening.conf`, which works there only because the competing `50-`/`60-` files
   were removed and cloud-init was neutralised.
 - **Files managed by cloud-init can be rewritten.** Editing `50-cloud-init.conf` is
@@ -536,7 +536,7 @@ allowusers <USER>
 authenticationmethods publickey
 ```
 `kbdinteractiveauthentication no` is pinned on purpose (see 11.4); the VPS does the same
-in [HARDENING.md](HARDENING.md).
+in [VPS-HARDENING.md](VPS-HARDENING.md).
 
 The full `sshd -T` output still lists `x11forwarding`, `allowtcpforwarding`,
 `allowagentforwarding` and `allowstreamlocalforwarding` as `yes`. This is expected:
@@ -584,4 +584,5 @@ nothing is listening on port `8080` yet (Pi-hole is installed later), so only
 - [SETUP.md](SETUP.md) — the VPN itself, command by command.
 - [PLAN.md](PLAN.md) — phases and design reasoning.
 - [OPERATIONS.md](OPERATIONS.md) — day-to-day usage.
-- [HARDENING.md](HARDENING.md) — SSH hardening of the VPS (the counterpart of step 11).
+- [VPS-HARDENING.md](VPS-HARDENING.md) — SSH hardening of the VPS (the counterpart of
+  step 11).

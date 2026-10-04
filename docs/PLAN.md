@@ -59,7 +59,7 @@ Hub-and-spoke topology: all peer traffic passes through the VPS.
 - Requirements: a dedicated public IPv4 + SSH access.
 
 ## Phase 1 — Prepare the VPS (hub)
-1. SSH hardening (see HARDENING.md).
+1. SSH hardening (see VPS-HARDENING.md).
 2. Install WireGuard (`wireguard-tools`).
 3. Enable IP forwarding (`net.ipv4.ip_forward=1`).
 4. Generate the VPS key pair.
@@ -163,7 +163,7 @@ abused for amplification attacks.
 - [SETUP.md](SETUP.md) — every command used, with explanations.
 - [PIHOLE.md](PIHOLE.md) — Pi-hole + Unbound on the Pi.
 - [OPERATIONS.md](OPERATIONS.md) — day-to-day usage.
-- [HARDENING.md](HARDENING.md) — VPS SSH hardening.
+- [VPS-HARDENING.md](VPS-HARDENING.md) — VPS SSH hardening.
 - [RASPBERRY-OS.md](RASPBERRY-OS.md) — OS install on the Pi, NVMe boot and SSH hardening.
 
 ## What you learn

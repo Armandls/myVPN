@@ -34,7 +34,7 @@ what each one does and why. All sensitive values are placeholders.
 
 # Phase 1 — VPS as WireGuard hub
 
-SSH hardening is documented separately in [HARDENING.md](HARDENING.md).
+SSH hardening is documented separately in [VPS-HARDENING.md](VPS-HARDENING.md).
 
 ## 1.1 Install WireGuard
 
