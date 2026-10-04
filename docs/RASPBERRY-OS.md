@@ -492,9 +492,12 @@ sudo chmod 600 /etc/ssh/sshd_config.d/40-myvpn.conf
 Makes the file readable (and writable) only by `root`. The default `644` already makes it
 editable only by `root`; `600` also stops other local users from reading it, for example
 to learn which account is in `AllowUsers`. It is not a secret, so this is not strictly
-required; it is kept consistent with `50-cloud-init.conf`. As a consequence, `sshd -T`
-(11.6) must be run with `sudo`: without it, sshd cannot read the file and prints
-`/etc/ssh/sshd_config.d/40-myvpn.conf: Permission denied`.
+required; it is kept consistent with `50-cloud-init.conf`. `sshd -t` and `sshd -T`
+(11.5, 11.6) always need `sudo` anyway: sshd must read the host private keys
+(`/etc/ssh/ssh_host_*_key`, readable only by `root`), and without root it exits with
+`no hostkeys available`. With the drop-in at `600`, the drop-in itself is also
+unreadable, so `/etc/ssh/sshd_config.d/40-myvpn.conf: Permission denied` is the first
+error reported.
 
 ### 11.5 Check the syntax, then restart
 
@@ -519,8 +522,8 @@ if something is wrong.
 sudo sshd -T | grep -Ei 'passwordauthentication|pubkeyauthentication|permitrootlogin|allowusers|kbdinteractive|authenticationmethods|disableforwarding|authorizedkeysfile|banner'
 ```
 `-T` prints the final configuration sshd actually uses, after merging every file (unlike
-`-t`, which only checks syntax). It needs `sudo` because `40-myvpn.conf` is readable only
-by `root`. Expected output (the order of the lines may differ):
+`-t`, which only checks syntax). It needs `sudo` because sshd must read the root-only
+host keys (and the `600` drop-in). Expected output (the order of the lines may differ):
 ```
 permitrootlogin no
 pubkeyauthentication yes
