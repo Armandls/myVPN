@@ -24,10 +24,24 @@ sudo apt update && sudo apt upgrade -y
 ## 2. SSH key (on the local machine)
 Generate the ed25519 key pair with a passphrase:
 ```
-ssh-keygen -t ed25519 -a 100 -C "vps-key" -f ~/.ssh/<KEY_NAME>
+ssh-keygen -t ed25519 -C "<comment>" -f ~/.ssh/<KEY_NAME>
 ```
-- `~/.ssh/<KEY_NAME>` → private key (permissions 600).
-- `~/.ssh/<KEY_NAME>.pub` → public key (permissions 644).
+Creates a new key pair dedicated to the VPS, on the laptop.
+
+- `-t ed25519` selects the Ed25519 algorithm: modern, secure and with short keys.
+- `-C "<comment>"` is only a label stored in the public key, to recognise it later (for
+  example in `authorized_keys`). It has no security role.
+- `-f ~/.ssh/<KEY_NAME>` chooses the file name: the private key is `~/.ssh/<KEY_NAME>`
+  (permissions 600) and the public key `~/.ssh/<KEY_NAME>.pub` (permissions 644).
+
+`ssh-keygen` then asks for a **passphrase** at an interactive prompt. The passphrase
+encrypts the private key on disk, so a stolen copy of the file is useless without it.
+Type it at the prompt rather than passing it with `-N "..."`: anything written on the
+command line is saved in the shell history.
+
+Optionally, `-a <rounds>` (e.g. `-a 100`) raises the number of KDF rounds that protect
+the passphrase (default 16), making brute-forcing a stolen key slower. It can also be
+applied to an existing key with `ssh-keygen -p -a 100 -f ~/.ssh/<KEY_NAME>`.
 
 > Note: the initial "No such file or directory" error came from typing `~` inside the
 > interactive prompt (the shell does not expand the tilde there). Fix: use an absolute
@@ -64,24 +78,128 @@ Neutralize cloud-init:
 ssh_pwauth: false
 ```
 
-Custom hardening file:
+Custom hardening file, now the only file in `/etc/ssh/sshd_config.d/`:
 ```
 # file: /etc/ssh/sshd_config.d/99-hardening.conf
-PasswordAuthentication no  # Don't accept a normal account password over SSH
-PermitRootLogin no  # Don't allow the root account to log in via SSH
-PubkeyAuthentication yes  # Allow SSH key authentication
-KbdInteractiveAuthentication no  # Don't allow keyboard-interactive authentication
+# Only <ADMIN_USER> may log in over SSH
+AllowUsers <ADMIN_USER>
+
+# Key-only login: no password authentication
+PubkeyAuthentication yes
+PasswordAuthentication no
+AuthenticationMethods publickey
+
+# No root login
+PermitRootLogin no
+
+# No keyboard-interactive authentication
+KbdInteractiveAuthentication no
+
+# Disable forwarding
+DisableForwarding yes
+
+# Only ~/.ssh/authorized_keys (drop the legacy authorized_keys2)
+AuthorizedKeysFile .ssh/authorized_keys
 ```
+It is the same set of directives as on the Pi, without the `Banner`. In short:
+
+- `AllowUsers <ADMIN_USER>` — only this account may log in over SSH.
+- `PubkeyAuthentication yes` / `PasswordAuthentication no` — key login allowed, password
+  login rejected.
+- `AuthenticationMethods publickey` — every login must succeed with a key; a second,
+  independent lock in case another file re-enabled a password method.
+- `PermitRootLogin no` — `root` cannot log in; administration goes through
+  `<ADMIN_USER>` and `sudo`.
+- `KbdInteractiveAuthentication no` — closes the other (PAM) way of asking for a
+  password, pinned here so no later file can turn it back on.
+- `DisableForwarding yes` — turns off all SSH forwarding (`ssh -L`/`-R`/`-D`, agent, X11,
+  Unix sockets).
+- `AuthorizedKeysFile .ssh/authorized_keys` — keys are read only from that file, not
+  from the legacy `authorized_keys2`, leaving a single place to audit.
+
+The full reasoning for each directive is in
+[RASPBERRY-OS.md Step 11.4](RASPBERRY-OS.md#114-create-the-drop-in-file).
+
+> `DisableForwarding` only concerns **SSH** forwarding. It has nothing to do with the
+> kernel's `net.ipv4.ip_forward`, which the VPS needs as the WireGuard hub to route
+> traffic between peers and out to the internet. WireGuard routing is not affected.
+
+Restrict the file's ownership and permissions:
+```
+sudo chown root:root /etc/ssh/sshd_config.d/99-hardening.conf
+sudo chmod 600 /etc/ssh/sshd_config.d/99-hardening.conf
+```
+Makes the file owned by `root` and readable/writable only by `root`, so no other local
+user can modify it or read it (for example to learn which account is in `AllowUsers`).
+`ls -la /etc/ssh/sshd_config.d/` then shows
+`-rw------- 1 root root ... 99-hardening.conf`. `sshd -t` and `sshd -T` always need
+`sudo` anyway: sshd must read the host private keys (`/etc/ssh/ssh_host_*_key`, readable
+only by `root`), and without root it exits with `no hostkeys available`. With the drop-in
+at `600`, the drop-in itself is also unreadable, so `Permission denied` on it is the
+first error reported.
 
 Apply and verify:
 ```
 sudo sshd -t
-sudo systemctl restart ssh
-sudo sshd -T | grep -Ei 'passwordauthentication|permitrootlogin'
-# Expected:
-#   permitrootlogin no
-#   passwordauthentication no
 ```
+Checks the whole SSH configuration for errors without applying it; it prints nothing
+when everything is correct. Run it **before** restarting, so sshd is never restarted
+with a broken configuration.
+
+```
+sudo systemctl restart ssh
+```
+Restarts the SSH server so it reads the new configuration. Existing sessions are not
+dropped: keep the current one open until the tests below pass, as the way back if
+something is wrong.
+
+```
+sudo sshd -T | grep -Ei 'passwordauthentication|pubkeyauthentication|permitrootlogin|allowusers|kbdinteractive|authenticationmethods|disableforwarding|authorizedkeysfile'
+```
+`-T` prints the final configuration sshd actually uses, after merging every file.
+Expected output (the order of the lines may differ):
+```
+permitrootlogin no
+pubkeyauthentication yes
+passwordauthentication no
+kbdinteractiveauthentication no
+disableforwarding yes
+authorizedkeysfile .ssh/authorized_keys
+allowusers <ADMIN_USER>
+authenticationmethods publickey
+```
+The full `sshd -T` output may still list `x11forwarding`, `allowtcpforwarding`,
+`allowagentforwarding` and `allowstreamlocalforwarding` as `yes`. This is expected:
+`disableforwarding yes` overrides them, so they have no effect.
+
+Test from a **new** terminal on the laptop. Once §4 is done, use the alias
+`ssh <ALIAS>` (or pass `-p <SSH_PORT>`); before §4 the port is still `22`. On recent
+Ubuntu the listening port is set through `ssh.socket` (§4):
+```
+ssh -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive <ALIAS>
+```
+Tries to log in using both password methods, ignoring keys. It must fail with
+`Permission denied (publickey)`: the text in parentheses is the list of methods the
+server offers, and here it offers only `publickey`.
+
+```
+ssh -o IdentitiesOnly=yes <ALIAS>
+```
+Logs in with the key from the alias (asking for its passphrase). `IdentitiesOnly=yes`
+makes ssh offer only the alias's `IdentityFile`, not other keys loaded in an agent, so
+the test proves that this specific key works. It must succeed. Only
+then is it safe to close the session that was kept open.
+
+```
+ssh -L 9999:localhost:8080 <ALIAS>
+```
+Logs in and asks ssh to forward the laptop's port `9999` to port `8080` on the VPS. The
+login itself succeeds. Then, from another terminal on the laptop, use the forwarded
+port, for example with `curl http://localhost:9999`: the ssh session prints
+`channel ... open failed: administratively prohibited`, which proves that
+`DisableForwarding yes` is in effect. If it prints
+`open failed: connect failed: Connection refused` instead, forwarding still works and
+simply nothing is listening on that port.
 
 ## 4. Change the SSH port (systemd socket method)
 Recent Ubuntu manages the SSH port through `ssh.socket`, not `sshd_config`:
@@ -111,6 +229,11 @@ sudo ss -tlnp | grep <SSH_PORT>
 ```
 
 ## 5. Fail2ban
+With password login disabled, brute-force attempts cannot succeed, but Fail2ban stays
+useful on the VPS: it is reachable from the whole internet, and banning repeat offenders
+cuts log noise and load. Older OpenSSH releases shipped with Ubuntu LTS may also lack
+the built-in `PerSourcePenalties`, which would otherwise throttle such clients.
+
 Install:
 ```
 sudo apt install fail2ban -y
@@ -171,7 +294,7 @@ sudo TERM=xterm-256color nano <file>
 Permanent fix, run from the local machine — note it must be installed system-wide
 (with `sudo`) so that root also finds it:
 ```
-infocmp -x xterm-kitty | ssh <HOST> 'sudo tic -x -'
+infocmp -x xterm-kitty | ssh <ALIAS> 'sudo tic -x -'
 ```
 `tic` prints a harmless warning about the description field.
 
