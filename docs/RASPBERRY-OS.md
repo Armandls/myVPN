@@ -84,11 +84,12 @@ this the safest moment to clone — before installing anything else.
 with `rsync`, grows the last partition to fill the disk, and gives the clone new
 PARTUUIDs, updating `cmdline.txt` and `/etc/fstab` on the destination to match.
 
-### A Bookworm / Pi 5–aware fork of `rpi-clone`
+### A maintained, Pi 5–aware fork of `rpi-clone`
 
-The original `billw2/rpi-clone` has been unmaintained since 2020. It predates Bookworm
-(it expects the boot partition at `/boot`, not `/boot/firmware`) and has no clear NVMe
-support. The maintained fork
+The original `billw2/rpi-clone` has been unmaintained since 2020. It predates the
+`/boot/firmware` layout (it expects the boot partition at `/boot`), which was introduced
+with Bookworm and is kept in the current Raspberry Pi OS, based on Debian 13 "trixie" —
+the version installed here. It also has no clear NVMe support. The maintained fork
 [geerlingguy/rpi-clone](https://github.com/geerlingguy/rpi-clone) handles both; version
 2.0.27 was used here.
 
@@ -349,8 +350,9 @@ but if it is kept, harden it the same way or wipe it.
 ## Step 11 — Harden SSH
 
 Until now the Pi accepts SSH logins with a password. This step switches it to key-only
-login, for `<USER>` only, with root login disabled. The order matters: the key is
-installed and tested **before** passwords are turned off, so access is never lost.
+login, for `<USER>` only, with root login and SSH forwarding disabled. The order
+matters: the key is installed and tested **before** passwords are turned off, so access
+is never lost.
 
 ### 11.1 Generate a key pair on the laptop
 
@@ -402,9 +404,26 @@ Opens a new, empty file in the `nano` editor as `root` (the directory is only wr
 ```
 # Only <USER> may log in over SSH
 AllowUsers <USER>
+
+# Key-only login: no password authentication
 PubkeyAuthentication yes
 PasswordAuthentication no
+AuthenticationMethods publickey
+
+# No root login
 PermitRootLogin no
+
+# No keyboard-interactive authentication
+KbdInteractiveAuthentication no
+
+# Disable forwarding
+DisableForwarding yes
+
+# Only ~/.ssh/authorized_keys (drop the legacy authorized_keys2)
+AuthorizedKeysFile .ssh/authorized_keys
+
+# Pre-login notice
+Banner /etc/ssh/banner
 ```
 
 - `AllowUsers <USER>` — only this account may log in over SSH; any other user is
@@ -412,11 +431,60 @@ PermitRootLogin no
 - `PubkeyAuthentication yes` — allows login with a key pair.
 - `PasswordAuthentication no` — rejects password logins, which removes password
   guessing as an attack.
+- `AuthenticationMethods publickey` — every login must succeed with a key. This is a
+  second, independent lock besides `PasswordAuthentication no`: even if another file
+  re-enabled a password method, it would not be accepted, unless that file also
+  overrides `AuthenticationMethods`.
 - `PermitRootLogin no` — `root` cannot log in over SSH; administration goes through
   `<USER>` and `sudo`.
+- `KbdInteractiveAuthentication no` — keyboard-interactive is the other way SSH can ask
+  for a password (through PAM). Debian's main `sshd_config` already sets it to `no`, but
+  that line comes **after** the `Include` of `sshd_config.d/`, so another drop-in could
+  override it. Setting it here pins it.
+- `DisableForwarding yes` — turns off every forwarding feature of sshd: TCP port
+  forwarding (`ssh -L`, `-R`, `-D`), ssh-agent forwarding, X11 and Unix-socket
+  (StreamLocal) forwarding. It overrides `AllowTcpForwarding`, `AllowAgentForwarding`,
+  `X11Forwarding` and `AllowStreamLocalForwarding`. It does not cover `PermitTunnel`
+  (tun devices, `ssh -w`), which is already `no` by default. It has nothing to do with
+  the kernel's `net.ipv4.ip_forward`: the Pi's role as LAN gateway and WireGuard
+  routing are not affected. The trade-off is that the Pi cannot be used as a `ProxyJump`
+  host, and tools that rely on SSH tunnels (`ssh -L`, VS Code Remote-SSH) do not work.
+  They are not needed here, because the VPN already gives direct access to the LAN and
+  to Pi-hole's `:8080`. If forwarding is ever needed, it can be re-enabled narrowly
+  inside a `Match User`/`Match Address` block.
+- `AuthorizedKeysFile .ssh/authorized_keys` — sshd only reads keys from
+  `~/.ssh/authorized_keys`. Debian's default also reads `~/.ssh/authorized_keys2`, a
+  legacy file nobody checks, where a key could be planted unnoticed. Limiting it to one
+  file leaves a single place to audit.
+- `Banner /etc/ssh/banner` — sshd sends the text in this file to anyone who connects,
+  **before** authentication. It is typically an authorised-use notice, and it must not
+  reveal anything useful to an attacker (hostname, OS, hardware, versions). It lives in
+  `/etc/ssh/`, owned by `root`, and not in the user's home: sshd reads it as `root`, in
+  its privileged process, before authentication, and follows symlinks. A file in the
+  user's home could be replaced by a symlink to a root-only file (for example
+  `/etc/shadow` or a WireGuard private key) by anything running as the user, and sshd
+  would then show that file's content to anyone who connects.
 
 Why the file is numbered `40-` is explained in
 [Design decisions](#ssh-settings-in-our-own-drop-in-file-numbered-40-).
+
+Create the banner referenced by `Banner`:
+```bash
+sudo nano /etc/ssh/banner
+```
+Opens a new file as `root`, so it is created owned by `root`. Write a short
+authorised-use notice and save, for example:
+```
+Authorized access only. All connections may be monitored and logged.
+```
+
+```bash
+sudo chown root:root /etc/ssh/banner
+sudo chmod 644 /etc/ssh/banner
+```
+Makes the banner owned by `root`, world-readable like the other files in `/etc/ssh/`,
+and writable only by `root`. The `chown` matters if the file was created or moved there
+by the normal user: otherwise that user could still replace its content.
 
 ```bash
 sudo chmod 600 /etc/ssh/sshd_config.d/40-myvpn.conf
@@ -424,7 +492,9 @@ sudo chmod 600 /etc/ssh/sshd_config.d/40-myvpn.conf
 Makes the file readable (and writable) only by `root`. The default `644` already makes it
 editable only by `root`; `600` also stops other local users from reading it, for example
 to learn which account is in `AllowUsers`. It is not a secret, so this is not strictly
-required; it is kept consistent with `50-cloud-init.conf`.
+required; it is kept consistent with `50-cloud-init.conf`. As a consequence, `sshd -T`
+(11.6) must be run with `sudo`: without it, sshd cannot read the file and prints
+`/etc/ssh/sshd_config.d/40-myvpn.conf: Permission denied`.
 
 ### 11.5 Check the syntax, then restart
 
@@ -446,23 +516,28 @@ if something is wrong.
 ### 11.6 Check the effective configuration
 
 ```bash
-sudo sshd -T | grep -Ei 'passwordauthentication|pubkeyauthentication|permitrootlogin|allowusers|kbdinteractive'
+sudo sshd -T | grep -Ei 'passwordauthentication|pubkeyauthentication|permitrootlogin|allowusers|kbdinteractive|authenticationmethods|disableforwarding|authorizedkeysfile|banner'
 ```
 `-T` prints the final configuration sshd actually uses, after merging every file (unlike
-`-t`, which only checks syntax). Expected output:
+`-t`, which only checks syntax). It needs `sudo` because `40-myvpn.conf` is readable only
+by `root`. Expected output (the order of the lines may differ):
 ```
 permitrootlogin no
 pubkeyauthentication yes
 passwordauthentication no
 kbdinteractiveauthentication no
+disableforwarding yes
+banner /etc/ssh/banner
+authorizedkeysfile .ssh/authorized_keys
 allowusers <USER>
+authenticationmethods publickey
 ```
-`kbdinteractiveauthentication no` is not set in our file: Debian's shipped
-`sshd_config` sets it to `no` (OpenSSH's own default is `yes`). It matters because
-keyboard-interactive is the other way SSH can ask for a password. That line comes
-**after** the `Include` of `sshd_config.d/`, so a drop-in could re-enable it. Adding
-`KbdInteractiveAuthentication no` to `40-myvpn.conf` would pin it, as
-[HARDENING.md](HARDENING.md) does for the VPS; it is not part of the current file.
+`kbdinteractiveauthentication no` is pinned on purpose (see 11.4); the VPS does the same
+in [HARDENING.md](HARDENING.md).
+
+The full `sshd -T` output still lists `x11forwarding`, `allowtcpforwarding`,
+`allowagentforwarding` and `allowstreamlocalforwarding` as `yes`. This is expected:
+`disableforwarding yes` overrides them, so they have no effect.
 
 ### 11.7 Test from the laptop
 
@@ -478,8 +553,21 @@ is the list of methods the server offers, and here it offers only `publickey`.
 ssh -i ~/.ssh/raspberry -o IdentitiesOnly=yes -o PasswordAuthentication=no <USER>@<PI_LAN_IP>
 ```
 Logs in with that key only, with no password fallback, as in 11.3 (asking for the key's
-passphrase). It must succeed. Only then is it safe
+passphrase). It must succeed. Before the passphrase prompt, the text of
+`/etc/ssh/banner` must be shown: that proves `Banner` is in effect. Only then is it safe
 to close the session that was kept open.
+
+```bash
+ssh -i ~/.ssh/raspberry -o IdentitiesOnly=yes -L 9999:localhost:8080 <USER>@<PI_LAN_IP>
+```
+Logs in with the key and asks ssh to forward the laptop's port `9999` to port `8080` on
+the Pi. The login itself succeeds. Then, from another terminal on the laptop, use the
+forwarded port, for example with `curl http://localhost:9999`: the connection fails and
+the ssh session prints `channel ... open failed: administratively prohibited`. This
+proves that `DisableForwarding yes` is in effect. If ssh instead prints
+`open failed: connect failed: Connection refused`, forwarding is still enabled and simply
+nothing is listening on port `8080` yet (Pi-hole is installed later), so only
+`administratively prohibited` proves that `DisableForwarding` works.
 
 ---
 
