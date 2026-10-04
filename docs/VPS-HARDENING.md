@@ -100,8 +100,11 @@ DisableForwarding yes
 
 # Only ~/.ssh/authorized_keys (drop the legacy authorized_keys2)
 AuthorizedKeysFile .ssh/authorized_keys
+
+# Pre-login notice
+Banner /etc/ssh/banner
 ```
-It is the same set of directives as on the Pi, without the `Banner`. In short:
+It is exactly the same set of directives as on the Pi. In short:
 
 - `AllowUsers <ADMIN_USER>` — only this account may log in over SSH.
 - `PubkeyAuthentication yes` / `PasswordAuthentication no` — key login allowed, password
@@ -116,6 +119,13 @@ It is the same set of directives as on the Pi, without the `Banner`. In short:
   Unix sockets).
 - `AuthorizedKeysFile .ssh/authorized_keys` — keys are read only from that file, not
   from the legacy `authorized_keys2`, leaving a single place to audit.
+- `Banner /etc/ssh/banner` — text sent to anyone who connects, **before**
+  authentication: an authorised-use notice that must not reveal anything useful
+  (hostname, OS, provider, versions). It lives in `/etc/ssh/`, owned by `root`, not in
+  the user's home, because sshd reads it as `root` before authentication and follows
+  symlinks: a file in the home could be swapped for a symlink to a root-only file (e.g.
+  `/etc/shadow` or a WireGuard private key), whose content sshd would then show to
+  anyone who connects.
 
 The full reasoning for each directive is in
 [RASPBERRY-OS.md Step 11.4](RASPBERRY-OS.md#114-create-the-drop-in-file).
@@ -138,6 +148,24 @@ only by `root`), and without root it exits with `no hostkeys available`. With th
 at `600`, the drop-in itself is also unreadable, so `Permission denied` on it is the
 first error reported.
 
+Create the banner referenced by `Banner`:
+```
+sudo nano /etc/ssh/banner
+```
+Opens a new file as `root`, so it is created owned by `root`. Write a short
+authorised-use notice and save, for example:
+```
+Authorized access only. All connections may be monitored and logged.
+```
+
+```
+sudo chown root:root /etc/ssh/banner
+sudo chmod 644 /etc/ssh/banner
+```
+Makes the banner owned by `root`, world-readable like the other files in `/etc/ssh/`,
+and writable only by `root`. The `chown` matters if the file was created or moved there
+by the normal user: otherwise that user could still replace its content.
+
 Apply and verify:
 ```
 sudo sshd -t
@@ -154,7 +182,7 @@ dropped: keep the current one open until the tests below pass, as the way back i
 something is wrong.
 
 ```
-sudo sshd -T | grep -Ei 'passwordauthentication|pubkeyauthentication|permitrootlogin|allowusers|kbdinteractive|authenticationmethods|disableforwarding|authorizedkeysfile'
+sudo sshd -T | grep -Ei 'passwordauthentication|pubkeyauthentication|permitrootlogin|allowusers|kbdinteractive|authenticationmethods|disableforwarding|authorizedkeysfile|banner'
 ```
 `-T` prints the final configuration sshd actually uses, after merging every file.
 Expected output (the order of the lines may differ):
@@ -164,6 +192,7 @@ pubkeyauthentication yes
 passwordauthentication no
 kbdinteractiveauthentication no
 disableforwarding yes
+banner /etc/ssh/banner
 authorizedkeysfile .ssh/authorized_keys
 allowusers <ADMIN_USER>
 authenticationmethods publickey
@@ -187,8 +216,9 @@ ssh -o IdentitiesOnly=yes <ALIAS>
 ```
 Logs in with the key from the alias (asking for its passphrase). `IdentitiesOnly=yes`
 makes ssh offer only the alias's `IdentityFile`, not other keys loaded in an agent, so
-the test proves that this specific key works. It must succeed. Only
-then is it safe to close the session that was kept open.
+the test proves that this specific key works. It must succeed. Before the passphrase
+prompt, the text of `/etc/ssh/banner` must be shown: that proves `Banner` is in effect.
+Only then is it safe to close the session that was kept open.
 
 ```
 ssh -L 9999:localhost:8080 <ALIAS>
