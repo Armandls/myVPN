@@ -1,4 +1,4 @@
-# Setup guide — all commands
+# WireGuard — all commands
 
 Chronological record of every command used to build the VPN, with an explanation of
 what each one does and why. All sensitive values are placeholders.

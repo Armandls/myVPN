@@ -4,7 +4,7 @@ DNS with ad blocking, plus recursive resolution so no third party sees the brows
 history. Runs on the Raspberry Pi in Docker and is reachable **only through the VPN** —
 nothing is exposed to the internet.
 
-This document follows the same convention as [SETUP.md](SETUP.md): every command is
+This document follows the same convention as [WIREGUARD.md](WIREGUARD.md): every command is
 listed with an explanation of what it does and why.
 
 Templates: [../pihole/docker-compose.yml.example](../pihole/docker-compose.yml.example),
@@ -17,7 +17,7 @@ Templates: [../pihole/docker-compose.yml.example](../pihole/docker-compose.yml.e
 - Persistent data lives under `/mnt/storage/appdata/<service>` (bind-mounted), so the
   containers can be recreated without losing state. Adjust the path to wherever the
   Pi's storage is mounted.
-- The WireGuard tunnel on the Pi is up, so `10.10.0.2` exists (see SETUP.md Phase 2).
+- The WireGuard tunnel on the Pi is up, so `10.10.0.2` exists (see WIREGUARD.md Phase 2).
 
 ---
 
@@ -248,5 +248,5 @@ NetworkManager and its usual upstream servers.
 
 ## Related documents
 
-- [SETUP.md](SETUP.md) — the VPN itself, command by command.
+- [WIREGUARD.md](WIREGUARD.md) — the VPN itself, command by command.
 - [OPERATIONS.md](OPERATIONS.md) — day-to-day usage, including Pi-hole commands.

@@ -3,7 +3,7 @@
 Record of the hardening steps applied to the VPS before setting up WireGuard.
 
 > The VPS firewall (default-DROP policy for both IPv4 and IPv6) is documented in
-> [SETUP.md](SETUP.md#16-firewall-default-drop-policy), since it is configured
+> [WIREGUARD.md](WIREGUARD.md#16-firewall-default-drop-policy), since it is configured
 > alongside WireGuard's own rules.
 
 ## Server details
@@ -331,5 +331,5 @@ infocmp -x xterm-kitty | ssh <ALIAS> 'sudo tic -x -'
 ---
 
 ## Related documents
-- [SETUP.md](SETUP.md) — WireGuard setup commands, and the VPS firewall (§1.6).
+- [WIREGUARD.md](WIREGUARD.md) — WireGuard setup commands, and the VPS firewall (§1.6).
 - [OPERATIONS.md](OPERATIONS.md) — ongoing maintenance.

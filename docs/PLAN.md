@@ -160,7 +160,7 @@ abused for amplification attacks.
 
 ## Related documents
 
-- [SETUP.md](SETUP.md) — every command used, with explanations.
+- [WIREGUARD.md](WIREGUARD.md) — every command used, with explanations.
 - [PIHOLE.md](PIHOLE.md) — Pi-hole + Unbound on the Pi.
 - [OPERATIONS.md](OPERATIONS.md) — day-to-day usage.
 - [VPS-HARDENING.md](VPS-HARDENING.md) — VPS SSH hardening.

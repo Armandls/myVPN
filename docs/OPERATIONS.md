@@ -1,7 +1,7 @@
 # Operations manual
 
 Day-to-day usage: bringing tunnels up and down, switching profiles, and diagnosing
-problems. For the initial build see [SETUP.md](SETUP.md).
+problems. For the initial build see [WIREGUARD.md](WIREGUARD.md).
 
 ## Address map
 

@@ -8,13 +8,13 @@ single user, no root login).
 The SSH hardening of the VPS is documented separately in
 [VPS-HARDENING.md](VPS-HARDENING.md); this document covers its Pi counterpart.
 
-This document follows the same convention as [SETUP.md](SETUP.md): every command is
+This document follows the same convention as [WIREGUARD.md](WIREGUARD.md): every command is
 listed with an explanation of what it does and why. Placeholders (`<USER>`,
 `<PI_HOSTNAME>`, ...) are defined in the
-[SETUP.md placeholders table](SETUP.md#placeholders-used).
+[WIREGUARD.md placeholders table](WIREGUARD.md#placeholders-used).
 
 When this is done, continue with
-[SETUP.md Phase 2](SETUP.md#phase-2--raspberry-pi-reverse-tunnel--lan-gateway) (WireGuard on
+[WIREGUARD.md Phase 2](WIREGUARD.md#phase-2--raspberry-pi-reverse-tunnel--lan-gateway) (WireGuard on
 the Pi) and then [PIHOLE.md](PIHOLE.md) (Docker + Pi-hole + Unbound).
 
 ---
@@ -576,12 +576,12 @@ nothing is listening on port `8080` yet (Pi-hole is installed later), so only
 
 ## Next steps
 
-- [SETUP.md Phase 2](SETUP.md#phase-2--raspberry-pi-reverse-tunnel--lan-gateway) — WireGuard on the Pi (reverse tunnel + LAN gateway).
+- [WIREGUARD.md Phase 2](WIREGUARD.md#phase-2--raspberry-pi-reverse-tunnel--lan-gateway) — WireGuard on the Pi (reverse tunnel + LAN gateway).
 - [PIHOLE.md](PIHOLE.md) — Docker + Pi-hole + Unbound.
 
 ## Related documents
 
-- [SETUP.md](SETUP.md) — the VPN itself, command by command.
+- [WIREGUARD.md](WIREGUARD.md) — the VPN itself, command by command.
 - [PLAN.md](PLAN.md) — phases and design reasoning.
 - [OPERATIONS.md](OPERATIONS.md) — day-to-day usage.
 - [VPS-HARDENING.md](VPS-HARDENING.md) — SSH hardening of the VPS (the counterpart of

@@ -57,7 +57,7 @@ home.
 
 | Document | What it covers |
 |---|---|
-| [docs/SETUP.md](docs/SETUP.md) | Every command used to build it, and why each one is needed |
+| [docs/WIREGUARD.md](docs/WIREGUARD.md) | Every command used to build it, and why each one is needed |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Day-to-day usage: switching profiles, health checks, adding devices |
 | [docs/PLAN.md](docs/PLAN.md) | Design and architecture: the phases and the reasoning behind each decision |
 | [docs/VPS-HARDENING.md](docs/VPS-HARDENING.md) | VPS SSH hardening: key-only auth, custom port, fail2ban |
