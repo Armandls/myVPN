@@ -160,7 +160,8 @@ abused for amplification attacks.
 
 ## Related documents
 
-- [WIREGUARD.md](WIREGUARD.md) — every command used, with explanations.
+- [WIREGUARD.md](WIREGUARD.md) — WireGuard setup, every command with explanations.
+- [PLACEHOLDERS.md](PLACEHOLDERS.md) — what each placeholder stands for.
 - [PIHOLE.md](PIHOLE.md) — Pi-hole + Unbound on the Pi.
 - [OPERATIONS.md](OPERATIONS.md) — day-to-day usage.
 - [VPS-HARDENING.md](VPS-HARDENING.md) — VPS SSH hardening.

@@ -10,8 +10,7 @@ The SSH hardening of the VPS is documented separately in
 
 This document follows the same convention as [WIREGUARD.md](WIREGUARD.md): every command is
 listed with an explanation of what it does and why. Placeholders (`<USER>`,
-`<PI_HOSTNAME>`, ...) are defined in the
-[WIREGUARD.md placeholders table](WIREGUARD.md#placeholders-used).
+`<PI_HOSTNAME>`, ...) are defined in [PLACEHOLDERS.md](PLACEHOLDERS.md).
 
 When this is done, continue with
 [WIREGUARD.md Phase 2](WIREGUARD.md#phase-2--raspberry-pi-reverse-tunnel--lan-gateway) (WireGuard on

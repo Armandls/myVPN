@@ -1,25 +1,8 @@
 # WireGuard — all commands
 
 Chronological record of every command used to build the VPN, with an explanation of
-what each one does and why. All sensitive values are placeholders.
-
-## Placeholders used
-
-| Placeholder | Meaning |
-|---|---|
-| `<VPS_PUBLIC_IP>` | Public IPv4 of the VPS |
-| `<SSH_PORT>` | Custom SSH port on the VPS |
-| `<PUBLIC_IFACE>` | VPS interface facing the internet (e.g. `ens3`) |
-| `<LAN_IFACE>` | Pi interface facing the home LAN (e.g. `eth0`) |
-| `<HOME_LAN_SUBNET>` | Home LAN subnet (e.g. `192.168.x.0/24`) |
-| `<HOME_ROUTER_IP>` | Home router / gateway IP |
-| `<PI_LAN_IP>` | Pi address on the home LAN |
-| `<PI_HOSTNAME>` | Hostname of the Pi, set in Raspberry Pi Imager |
-| `<USER>` | Login user on the Pi, set in Raspberry Pi Imager |
-| `<VPS_PUBLIC_KEY>` | WireGuard public key of the VPS |
-| `<PI_PUBLIC_KEY>` | WireGuard public key of the Pi |
-| `<PHONE_PUBLIC_KEY>` | WireGuard public key of the phone |
-| `<LAPTOP_PUBLIC_KEY>` | WireGuard public key of the laptop |
+what each one does and why. All sensitive values are placeholders, defined in
+[PLACEHOLDERS.md](PLACEHOLDERS.md).
 
 ## VPN address map
 

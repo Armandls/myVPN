@@ -57,11 +57,12 @@ home.
 
 | Document | What it covers |
 |---|---|
-| [docs/WIREGUARD.md](docs/WIREGUARD.md) | Every command used to build it, and why each one is needed |
+| [docs/WIREGUARD.md](docs/WIREGUARD.md) | WireGuard on the VPS, the Pi and the clients: every command, and why each one is needed |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Day-to-day usage: switching profiles, health checks, adding devices |
 | [docs/PLAN.md](docs/PLAN.md) | Design and architecture: the phases and the reasoning behind each decision |
 | [docs/VPS-HARDENING.md](docs/VPS-HARDENING.md) | VPS SSH hardening: key-only auth, custom port, fail2ban |
 | [docs/PIHOLE.md](docs/PIHOLE.md) | Pi-hole + Unbound on the Pi: DNS filtering with recursive resolution |
+| [docs/PLACEHOLDERS.md](docs/PLACEHOLDERS.md) | What each placeholder (`<VPS_PUBLIC_IP>`, `<USER>`, ...) stands for |
 | [docs/RASPBERRY-OS.md](docs/RASPBERRY-OS.md) | Preparing the Pi: Raspberry Pi OS Lite cloned from microSD to NVMe, booting from NVMe, and SSH hardening |
 
 Configuration templates live in [`vps/`](vps/), [`raspberry/`](raspberry/),
@@ -84,7 +85,8 @@ Configuration templates live in [`vps/`](vps/), [`raspberry/`](raspberry/),
   shared. The `.gitignore` blocks `*.key`, real `*.conf` files and `.env`; only
   `*.example` templates are tracked.
 - All configuration here uses **placeholders** (`<VPS_PUBLIC_IP>`, `<HOME_LAN_SUBNET>`,
-  `<...KEY>`), never real values.
+  `<...KEY>`), never real values. They are defined in
+  [docs/PLACEHOLDERS.md](docs/PLACEHOLDERS.md).
 - The VPS firewall uses a **default-DROP policy on both IPv4 and IPv6**, allowing only
   SSH, WireGuard, loopback, established connections and ICMP. ICMPv6 is allowed in full,
   since Neighbor Discovery and PMTUD depend on it.
