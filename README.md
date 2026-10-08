@@ -1,103 +1,38 @@
-# myVPN — Self-hosted WireGuard VPN with a VPS hub
+# myVPN — Self-hosted VPN and homelab
 
-Reach my home network from anywhere and route traffic through my own server, **without
-opening a single port on the home router**. Built from scratch with WireGuard, no
-managed VPN service involved.
+Personal homelab and WireGuard VPN project, being rebuilt step by step from a clean base.
+For now the repository documents only the preparation of the two hosts: the Raspberry Pi
+and the VPS. Every command is listed with what it does and why.
 
-Working and in daily use.
-
-This repository documents the entire build: every command with the reasoning behind it,
-plus the reasoning behind each design decision. Configuration
-templates are sanitized; no private keys or personal data are included.
-
-## What works today
-
-Every goal is met and verified with evidence, not assumption:
-
-| Goal | How it is verified |
-|---|---|
-| Reach the whole home LAN from outside | ping to a home device replies with `ttl=63` — one hop less than direct, proving it was routed through the Pi |
-| Exit to the internet via the VPS IP | `curl -4 ifconfig.me` returns the VPS public IP when the full tunnel is up |
-| No ports opened on the home router | the Pi holds an outbound tunnel open with `PersistentKeepalive`; the router only ever sees outgoing traffic |
-| Switchable split / full profiles | two profiles per client, one active at a time |
-| DNS filtered and privately resolved | packet capture shows queries going to the DNS root servers, never to a third-party resolver |
-| No IPv6 leaks in full tunnel | IPv6 is dropped by a dedicated nftables table while the tunnel is up, so it can neither leak nor stall connections |
-| Survives reboots | tunnels and containers come back automatically on VPS, Pi and laptop |
-
-Side effect worth noting: because DNS is resolved by the Pi through the tunnel, **ad
-blocking works on the phone over mobile data, away from home, with no app installed**.
-
-## Architecture
-
-```mermaid
-graph TB
-    subgraph internet["Internet"]
-        VPS["<b>VPS · hub</b><br/>wg0 = 10.10.0.1<br/>static public IP · UDP 51820<br/>NAT · FORWARD · MSS clamping"]
-    end
-
-    subgraph home["Home network"]
-        PI["<b>Raspberry Pi</b><br/>wg0 = 10.10.0.2<br/>reverse tunnel · LAN gateway<br/>Pi-hole + Unbound"]
-        LAN["Home LAN<br/>NAS · other machines"]
-    end
-
-    PHONE["Phone<br/>10.10.0.11"]
-    LAPTOP["Laptop<br/>10.10.0.12"]
-
-    PI -. "outbound tunnel<br/>no router ports opened" .-> VPS
-    PHONE --> VPS
-    LAPTOP --> VPS
-    PI --- LAN
-```
-
-Hub-and-spoke: the VPS is the only peer with a stable public address, so every other
-device connects outbound to it. That is what removes the need for port forwarding at
-home.
-
-## Documentation
+## Documents
 
 | Document | What it covers |
 |---|---|
-| [docs/WIREGUARD.md](docs/WIREGUARD.md) | WireGuard on the VPS, the Pi and the clients: every command, and why each one is needed |
-| [docs/OPERATIONS.md](docs/OPERATIONS.md) | Day-to-day usage: switching profiles, health checks, adding devices |
-| [docs/PLAN.md](docs/PLAN.md) | Design and architecture: the phases and the reasoning behind each decision |
-| [docs/VPS-HARDENING.md](docs/VPS-HARDENING.md) | VPS SSH hardening: key-only auth, custom port, fail2ban |
-| [docs/PIHOLE.md](docs/PIHOLE.md) | Pi-hole + Unbound on the Pi: DNS filtering with recursive resolution |
-| [docs/PLACEHOLDERS.md](docs/PLACEHOLDERS.md) | What each placeholder (`<VPS_PUBLIC_IP>`, `<USER>`, ...) stands for |
-| [docs/RASPBERRY-OS.md](docs/RASPBERRY-OS.md) | Preparing the Pi: Raspberry Pi OS Lite cloned from microSD to NVMe, booting from NVMe, and SSH hardening |
+| [docs/RASPBERRY-SETUP.md](docs/RASPBERRY-SETUP.md) | Raspberry Pi OS Lite install, microSD → NVMe clone with `rpi-clone`, boot order, SSH hardening |
+| [docs/VPS-SETUP.md](docs/VPS-SETUP.md) | VPS SSH hardening: key-only login, `AuthenticationMethods`, `DisableForwarding`, banner, custom port via `ssh.socket`, Fail2ban |
 
-Configuration templates live in [`vps/`](vps/), [`raspberry/`](raspberry/),
-[`clients/`](clients/) and [`pihole/`](pihole/).
+## Placeholders
 
-## Tech stack
+Every sensitive or machine-specific value is replaced by a placeholder. Real values are
+never committed: the `.gitignore` blocks `*.conf`, `*.key` and `.env`.
 
-- **WireGuard** — kernel-space, modern crypto, UDP.
-- **iptables / nftables** — NAT/MASQUERADE, default-DROP firewall (IPv4 and IPv6), MSS
-  clamping, and IPv6 blocking on full-tunnel clients.
-- **systemd** — `wg-quick@wg0` for auto start, `ssh.socket` for the SSH port,
-  `RequiresMountsFor` for storage ordering.
-- **fail2ban** + SSH hardening — key-only auth on a non-default port.
-- **Docker + Compose** — self-hosted services on the Pi.
-- **Pi-hole + Unbound** — DNS filtering with recursive resolution from the root servers.
+| Placeholder | Meaning |
+|---|---|
+| `<USER>` | Login user on the Pi, set in Raspberry Pi Imager |
+| `<PI_HOSTNAME>` | Hostname of the Pi, set in Raspberry Pi Imager |
+| `<PI_LAN_IP>` | Pi address on the home LAN |
+| `<ADMIN_USER>` | Admin user on the VPS (with sudo) |
+| `<VPS_PUBLIC_IP>` | Public IPv4 of the VPS |
+| `<SSH_PORT>` | Custom SSH port on the VPS |
+| `<KEY_NAME>` | File name of the VPS SSH key pair on the laptop (`~/.ssh/<KEY_NAME>`) |
+| `<ALIAS>` | Host alias for the VPS in the laptop's `~/.ssh/config` |
+| `<comment>` | Free-text label stored in an SSH public key (`ssh-keygen -C`) |
 
-## Security notes
+## Status / next
 
-- **Private keys never leave the device that generated them.** Only public keys are
-  shared. The `.gitignore` blocks `*.key`, real `*.conf` files and `.env`; only
-  `*.example` templates are tracked.
-- All configuration here uses **placeholders** (`<VPS_PUBLIC_IP>`, `<HOME_LAN_SUBNET>`,
-  `<...KEY>`), never real values. They are defined in
-  [docs/PLACEHOLDERS.md](docs/PLACEHOLDERS.md).
-- The VPS firewall uses a **default-DROP policy on both IPv4 and IPv6**, allowing only
-  SSH, WireGuard, loopback, established connections and ICMP. ICMPv6 is allowed in full,
-  since Neighbor Discovery and PMTUD depend on it.
-- The tunnel carries IPv4 only. IPv6 is **blocked** while a full tunnel is active rather
-  than left to leak — the VPS has a single `/128` with no routed prefix, so carrying IPv6
-  would require NAT66, which conflicts with `wg-quick`'s policy routing. The reasoning is
-  documented in [clients/laptop-full.conf.example](clients/laptop-full.conf.example).
-- Home services are reachable **only through the tunnel** — nothing is exposed to the
-  internet.
+The WireGuard VPN (VPS as hub, Pi as home LAN gateway) and the homelab services on the
+Pi will be documented here as they are rebuilt.
 
 ## License
 
-[MIT](LICENSE). Documentation and templates provided as-is; adapt the security decisions
-to your own threat model rather than copying them blindly.
+[MIT](LICENSE).

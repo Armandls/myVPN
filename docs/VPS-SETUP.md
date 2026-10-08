@@ -1,14 +1,12 @@
-# VPS SSH Hardening
+# VPS setup — SSH hardening
 
 Record of the hardening steps applied to the VPS before setting up WireGuard.
 
-> The VPS firewall (default-DROP policy for both IPv4 and IPv6) is documented in
-> [WIREGUARD.md](WIREGUARD.md#16-firewall-default-drop-policy), since it is configured
-> alongside WireGuard's own rules.
+> The VPS firewall and WireGuard are being rebuilt and will be documented separately.
 
 ## Server details
 - **Provider**: cloud VPS. This build used 2 vCore, 4 GB RAM, 40 GB NVMe and
-  unmetered traffic; see PLAN.md for the actual minimum requirements.
+  unmetered traffic.
 - **OS**: Ubuntu LTS.
 - **Public IP (IPv4)**: `<VPS_PUBLIC_IP>`
 - **Admin user**: `<ADMIN_USER>` (with sudo).
@@ -128,7 +126,7 @@ It is exactly the same set of directives as on the Pi. In short:
   anyone who connects.
 
 The full reasoning for each directive is in
-[RASPBERRY-OS.md Step 11.4](RASPBERRY-OS.md#114-create-the-drop-in-file).
+[RASPBERRY-SETUP.md Step 11.4](RASPBERRY-SETUP.md#114-create-the-drop-in-file).
 
 > `DisableForwarding` only concerns **SSH** forwarding. It has nothing to do with the
 > kernel's `net.ipv4.ip_forward`, which the VPS needs as the WireGuard hub to route
@@ -261,8 +259,9 @@ sudo ss -tlnp | grep <SSH_PORT>
 ## 5. Fail2ban
 With password login disabled, brute-force attempts cannot succeed, but Fail2ban stays
 useful on the VPS: it is reachable from the whole internet, and banning repeat offenders
-cuts log noise and load. Older OpenSSH releases shipped with Ubuntu LTS may also lack
-the built-in `PerSourcePenalties`, which would otherwise throttle such clients.
+cuts log noise and load. OpenSSH 9.8+ (e.g. Ubuntu 26.04 LTS) already throttles failing
+sources with the built-in `PerSourcePenalties`; on older releases such as Ubuntu 24.04
+(OpenSSH 9.6) Fail2ban is the only throttling.
 
 Install:
 ```
@@ -331,5 +330,5 @@ infocmp -x xterm-kitty | ssh <ALIAS> 'sudo tic -x -'
 ---
 
 ## Related documents
-- [WIREGUARD.md](WIREGUARD.md) — WireGuard setup commands, and the VPS firewall (§1.6).
-- [OPERATIONS.md](OPERATIONS.md) — ongoing maintenance.
+- [RASPBERRY-SETUP.md](RASPBERRY-SETUP.md) — preparing the Raspberry Pi: OS on NVMe and
+  SSH hardening (the reasoning behind each sshd directive).

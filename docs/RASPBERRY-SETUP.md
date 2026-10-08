@@ -6,15 +6,10 @@ from the NVMe from then on, and finally harden SSH access to the Pi (key-only lo
 single user, no root login).
 
 The SSH hardening of the VPS is documented separately in
-[VPS-HARDENING.md](VPS-HARDENING.md); this document covers its Pi counterpart.
+[VPS-SETUP.md](VPS-SETUP.md); this document covers its Pi counterpart.
 
-This document follows the same convention as [WIREGUARD.md](WIREGUARD.md): every command is
-listed with an explanation of what it does and why. Placeholders (`<USER>`,
-`<PI_HOSTNAME>`, ...) are defined in [PLACEHOLDERS.md](PLACEHOLDERS.md).
-
-When this is done, continue with
-[WIREGUARD.md Phase 2](WIREGUARD.md#phase-2--raspberry-pi-reverse-tunnel--lan-gateway) (WireGuard on
-the Pi) and then [PIHOLE.md](PIHOLE.md) (Docker + Pi-hole + Unbound).
+Every command is listed with an explanation of what it does and why. Placeholders
+(`<USER>`, `<PI_HOSTNAME>`, ...) are defined in the [README](../README.md#placeholders).
 
 ---
 
@@ -108,7 +103,7 @@ file, `/etc/ssh/sshd_config.d/40-myvpn.conf`:
 - **cloud-init sets `PasswordAuthentication yes`.** The Imager settings are applied on
   first boot by cloud-init, which writes `50-cloud-init.conf` with password login
   enabled. A file numbered `99-` would be read after it and lose; numbered `40-`, it wins
-  whatever cloud-init writes. On the VPS, [VPS-HARDENING.md](VPS-HARDENING.md) uses
+  whatever cloud-init writes. On the VPS, [VPS-SETUP.md](VPS-SETUP.md) uses
   `99-hardening.conf`, which works there only because the competing `50-`/`60-` files
   were removed and cloud-init was neutralised.
 - **Files managed by cloud-init can be rewritten.** Editing `50-cloud-init.conf` is
@@ -448,9 +443,9 @@ Banner /etc/ssh/banner
   the kernel's `net.ipv4.ip_forward`: the Pi's role as LAN gateway and WireGuard
   routing are not affected. The trade-off is that the Pi cannot be used as a `ProxyJump`
   host, and tools that rely on SSH tunnels (`ssh -L`, VS Code Remote-SSH) do not work.
-  They are not needed here, because the VPN already gives direct access to the LAN and
-  to Pi-hole's `:8080`. If forwarding is ever needed, it can be re-enabled narrowly
-  inside a `Match User`/`Match Address` block.
+  They are not needed here, because the VPN (documented later) will give direct access
+  to the LAN and to the Pi's services. If forwarding is ever needed, it can be
+  re-enabled narrowly inside a `Match User`/`Match Address` block.
 - `AuthorizedKeysFile .ssh/authorized_keys` — sshd only reads keys from
   `~/.ssh/authorized_keys`. Debian's default also reads `~/.ssh/authorized_keys2`, a
   legacy file nobody checks, where a key could be planted unnoticed. Limiting it to one
@@ -535,7 +530,7 @@ allowusers <USER>
 authenticationmethods publickey
 ```
 `kbdinteractiveauthentication no` is pinned on purpose (see 11.4); the VPS does the same
-in [VPS-HARDENING.md](VPS-HARDENING.md).
+in [VPS-SETUP.md](VPS-SETUP.md).
 
 The full `sshd -T` output still lists `x11forwarding`, `allowtcpforwarding`,
 `allowagentforwarding` and `allowstreamlocalforwarding` as `yes`. This is expected:
@@ -575,13 +570,9 @@ nothing is listening on port `8080` yet (Pi-hole is installed later), so only
 
 ## Next steps
 
-- [WIREGUARD.md Phase 2](WIREGUARD.md#phase-2--raspberry-pi-reverse-tunnel--lan-gateway) — WireGuard on the Pi (reverse tunnel + LAN gateway).
-- [PIHOLE.md](PIHOLE.md) — Docker + Pi-hole + Unbound.
+WireGuard on the Pi and the homelab services will be documented later, as they are
+rebuilt.
 
 ## Related documents
 
-- [WIREGUARD.md](WIREGUARD.md) — the VPN itself, command by command.
-- [PLAN.md](PLAN.md) — phases and design reasoning.
-- [OPERATIONS.md](OPERATIONS.md) — day-to-day usage.
-- [VPS-HARDENING.md](VPS-HARDENING.md) — SSH hardening of the VPS (the counterpart of
-  step 11).
+- [VPS-SETUP.md](VPS-SETUP.md) — SSH hardening of the VPS (the counterpart of step 11).
