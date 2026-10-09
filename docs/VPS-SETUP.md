@@ -2,8 +2,8 @@
 
 Record of the hardening steps applied to the VPS before setting up WireGuard.
 
-> The base firewall is documented in §7. WireGuard is being rebuilt and will be
-> documented separately.
+> The base firewall is documented in §7. WireGuard is documented separately in
+> [VPS-WIREGUARD.md](VPS-WIREGUARD.md).
 
 ## Server details
 - **Provider**: cloud VPS. This build used 2 vCore, 4 GB RAM, 40 GB NVMe and
@@ -337,7 +337,8 @@ The model is **deny by default, allow by exception**:
 
 These rules live **outside** WireGuard's `wg0.conf` and are persisted with
 `iptables-persistent`, so SSH access never depends on the tunnel being up. `FORWARD`
-gets its WireGuard-specific allow rules later, from the `PostUp` hooks in `wg0.conf`.
+gets its WireGuard-specific allow rules later, from the `PostUp` hooks in `wg0.conf`
+(see [VPS-WIREGUARD.md §5](VPS-WIREGUARD.md#5-configuration-etcwireguardwg0conf)).
 
 ### 7.1 Inventory: what is listening
 ```
@@ -561,5 +562,6 @@ type `8`.
 ---
 
 ## Related documents
+- [VPS-WIREGUARD.md](VPS-WIREGUARD.md) — the WireGuard hub built on top of this firewall.
 - [RASPBERRY-SETUP.md](RASPBERRY-SETUP.md) — preparing the Raspberry Pi: OS on NVMe and
   SSH hardening (the reasoning behind each sshd directive).
