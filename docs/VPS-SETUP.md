@@ -1,8 +1,9 @@
-# VPS setup — SSH hardening
+# VPS setup — SSH hardening and firewall
 
 Record of the hardening steps applied to the VPS before setting up WireGuard.
 
-> The VPS firewall and WireGuard are being rebuilt and will be documented separately.
+> The base firewall is documented in §7. WireGuard is being rebuilt and will be
+> documented separately.
 
 ## Server details
 - **Provider**: cloud VPS. This build used 2 vCore, 4 GB RAM, 40 GB NVMe and
@@ -326,6 +327,236 @@ Permanent fix, run from the local machine — note it must be installed system-w
 infocmp -x xterm-kitty | ssh <ALIAS> 'sudo tic -x -'
 ```
 `tic` prints a harmless warning about the description field.
+
+## 7. Firewall (iptables, IPv4 and IPv6)
+The model is **deny by default, allow by exception**:
+
+- `INPUT` (traffic addressed to the VPS) and `FORWARD` (traffic passing through it)
+  have policy `DROP`: anything not explicitly allowed is discarded.
+- `OUTPUT` (traffic the VPS sends) stays `ACCEPT`.
+
+These rules live **outside** WireGuard's `wg0.conf` and are persisted with
+`iptables-persistent`, so SSH access never depends on the tunnel being up. `FORWARD`
+gets its WireGuard-specific allow rules later, from the `PostUp` hooks in `wg0.conf`.
+
+### 7.1 Inventory: what is listening
+```
+sudo ss -tulnp
+```
+Lists every open socket, to know which services need a rule before closing anything.
+
+- `-t` / `-u` — TCP and UDP sockets.
+- `-l` — only listening sockets (services waiting for connections).
+- `-n` — numeric addresses and ports, no name resolution.
+- `-p` — the process that owns each socket (needs `sudo`).
+
+The `Local Address` column tells who can reach each service: `0.0.0.0` or `[::]` means
+all interfaces, so the service is exposed to the internet; `127.0.0.x` or `[::1]` means
+loopback only, reachable just from the VPS itself.
+
+What was found on this VPS:
+
+- `sshd` on `<SSH_PORT>`, on `0.0.0.0` and `[::]` (started by systemd through
+  `ssh.socket`, §4) → exposed, **needs a rule**.
+- `systemd-resolved` on `127.0.0.53:53` and `127.0.0.54:53`, `chronyd` on
+  `127.0.0.1:323` and `[::1]:323` → loopback only, no rule needed.
+- `systemd-networkd` DHCP client on UDP `68` on the public interface (`<PUBLIC_IFACE>`)
+  → no rule needed: the replies to its lease renewals match `ESTABLISHED` (below).
+- No DHCPv6 listener → the IPv6 configuration comes from Router Advertisements or is
+  static; either way ICMPv6 is required (Neighbor Discovery, Path MTU discovery), see
+  §7.3.
+
+> **Connection tracking.** The kernel remembers every connection. `ESTABLISHED` matches
+> replies to connections the VPS started itself (apt, DNS through `systemd-resolved`,
+> NTP through `chrony`, DHCP renewals) and also keeps the current SSH session alive.
+> `RELATED` matches ICMP errors tied to an existing connection, such as "fragmentation
+> needed". This is why outbound traffic needs no rules of its own.
+
+### 7.2 Safety net
+Keep a **second SSH session** open the whole time, then arm a revert timer:
+```
+sudo systemd-run --on-active=5min --unit=fw-revert sh -c 'iptables -P INPUT ACCEPT; ip6tables -P INPUT ACCEPT'
+```
+Schedules a command that reopens `INPUT` in 5 minutes, in case a mistake locks SSH out.
+
+- `systemd-run` — runs a command as a transient systemd unit, independent of the SSH
+  session, so it still fires if the session dies.
+- `--on-active=5min` — creates a timer that fires 5 minutes from now.
+- `--unit=fw-revert` — names the units `fw-revert.timer` / `fw-revert.service`, so the
+  timer is easy to check and cancel.
+- `sh -c '...'` — runs both commands in one shell. It only resets the `INPUT` policies
+  to `ACCEPT`; the rules stay, but that is enough to let SSH back in.
+
+```
+systemctl list-timers fw-revert.timer
+```
+Confirms the timer is armed and shows how much time is left.
+
+To re-arm the timer (for example after it fired), run
+`sudo systemctl stop fw-revert.timer` first: a timer that already fired stays loaded,
+and `systemd-run` with the same name fails.
+
+### 7.3 Allow rules
+Rules are checked **top to bottom and the first match wins**, so they are added before
+the policy is switched to `DROP`.
+
+```
+sudo iptables -S
+sudo ip6tables -S
+```
+Pre-check: each must print only the three `-P ... ACCEPT` policies and no rules. `-A`
+appends, so leftover rules would cause duplicates or rules that are never reached.
+
+> Replace the placeholders before running. Pasting `<SSH_PORT>` literally makes bash
+> read `<` as input redirection: it fails with `SSH_PORT: No such file or directory`
+> and the command does not run.
+
+IPv4:
+```
+sudo iptables -A INPUT -i lo -j ACCEPT
+sudo iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport <SSH_PORT> -j ACCEPT
+sudo iptables -A INPUT -p udp --dport 51820 -j ACCEPT
+sudo iptables -A INPUT -p icmp --icmp-type echo-request -j ACCEPT
+```
+`-A INPUT` appends each rule to the end of the `INPUT` chain, and `-j ACCEPT` lets the
+matching packet in.
+
+- `-i lo` — traffic on the loopback interface, used by local programs to reach local
+  services (the `systemd-resolved` stub on `127.0.0.53`, chrony's control port).
+- `-m conntrack --ctstate ESTABLISHED,RELATED` — replies and related ICMP errors (see
+  the box above).
+- `-p tcp --dport <SSH_PORT>` — new SSH connections.
+- `-p udp --dport 51820` — WireGuard, opened in advance: nothing listens there yet.
+- `-p icmp --icmp-type echo-request` — answers `ping`, useful for diagnostics.
+
+IPv6:
+```
+sudo ip6tables -A INPUT -i lo -j ACCEPT
+sudo ip6tables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+sudo ip6tables -A INPUT -p tcp --dport <SSH_PORT> -j ACCEPT
+sudo ip6tables -A INPUT -p udp --dport 51820 -j ACCEPT
+sudo ip6tables -A INPUT -p ipv6-icmp -j ACCEPT
+```
+The same rules for IPv6, except the last one, which allows **all** ICMPv6 instead of only
+echo requests. IPv6 cannot work without ICMPv6: it carries Neighbor Discovery (IPv6's
+equivalent of ARP), Router Advertisements (if the IPv6 setup is not static) and Path MTU
+discovery.
+
+```
+sudo iptables -S INPUT
+sudo ip6tables -S INPUT
+```
+Prints the `INPUT` chain as rules. Check that all five rules are there, each exactly
+once, and that the SSH port matches the one shown by `ss`.
+
+### 7.4 Default policies
+```
+sudo iptables -P INPUT DROP
+sudo iptables -P FORWARD DROP
+sudo ip6tables -P INPUT DROP
+sudo ip6tables -P FORWARD DROP
+```
+`-P` sets a chain's default policy: what happens to a packet that matched no rule. From
+now on, anything not allowed in §7.3 is dropped. The current SSH session survives
+because it matches `ESTABLISHED`.
+
+> This cloud image enables IPv4 and IPv6 forwarding at boot on its own (no sysctl file
+> sets it). `FORWARD DROP` is what keeps the VPS from routing traffic for others.
+
+### 7.5 Test from a new terminal
+```
+ssh <ALIAS>
+```
+Run it from a **new** terminal on the laptop. A new connection proves that the SSH rule
+works; an already open session only proves `ESTABLISHED`. If it fails, do not save
+anything: wait for the timer to reopen `INPUT`, fix the rules and re-arm the timer
+(§7.2) before switching the policies to `DROP` again.
+
+### 7.6 Persist the rules
+```
+sudo systemctl stop fw-revert.timer
+systemctl list-timers fw-revert.timer
+```
+Cancels the revert timer **first**. The second command must print `0 timers listed`.
+
+```
+sudo iptables -S | head -2
+sudo ip6tables -S | head -2
+```
+Shows the first lines of the ruleset, which are the policies. `INPUT` and `FORWARD` must
+still be `DROP`.
+
+```
+sudo iptables -S | grep f2b
+sudo ip6tables -S | grep f2b
+```
+Both must print nothing. If Fail2ban uses iptables actions, its `f2b-*` chains would
+otherwise be saved into `rules.v4`/`rules.v6` and clash with the ones Fail2ban creates
+at boot.
+
+```
+sudo apt install iptables-persistent
+```
+Installs `netfilter-persistent`, which reloads `/etc/iptables/rules.v4` and
+`/etc/iptables/rules.v6` at boot. During the install, answer **Yes** to saving the
+current IPv4 and IPv6 rules. If `ufw` is installed, apt proposes to remove it, because
+the two conflict; that is expected (ufw is not used here). If the package is already
+installed, save with:
+```
+sudo netfilter-persistent save
+```
+Writes the rules currently in the kernel to those two files.
+
+```
+sudo grep -E ':INPUT|:FORWARD' /etc/iptables/rules.v4 /etc/iptables/rules.v6
+```
+Shows the saved policies. In the `filter` section `INPUT` and `FORWARD` must be `DROP`;
+the policy shown for the `mangle` table is irrelevant here.
+
+> **Lesson learned: cancel the timer → check the policy → save.** If the timer fires
+> before it is cancelled, `INPUT` goes back to `ACCEPT`, and saving afterwards makes the
+> open firewall permanent. This happened once during this rebuild and was caught by the
+> reboot check below.
+
+> Never run `netfilter-persistent save` while `wg0` is up: the `PostUp` rules would be
+> saved too, loaded at boot and then added again by `PostUp`, leaving duplicate rules
+> that `PostDown` does not fully remove.
+
+### 7.7 Reboot and verify
+```
+sudo reboot
+```
+Only a real reboot proves that the rules are loaded at boot. After reconnecting:
+```
+sudo iptables -S
+sudo ip6tables -S
+```
+Expected output for IPv4:
+```
+-P INPUT DROP
+-P FORWARD DROP
+-P OUTPUT ACCEPT
+-A INPUT -i lo -j ACCEPT
+-A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+-A INPUT -p tcp -m tcp --dport <SSH_PORT> -j ACCEPT
+-A INPUT -p udp -m udp --dport 51820 -j ACCEPT
+-A INPUT -p icmp -m icmp --icmp-type 8 -j ACCEPT
+```
+And for IPv6:
+```
+-P INPUT DROP
+-P FORWARD DROP
+-P OUTPUT ACCEPT
+-A INPUT -i lo -j ACCEPT
+-A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+-A INPUT -p tcp -m tcp --dport <SSH_PORT> -j ACCEPT
+-A INPUT -p udp -m udp --dport 51820 -j ACCEPT
+-A INPUT -p ipv6-icmp -j ACCEPT
+```
+`iptables -S` prints rules in its own normalised form: it adds the implicit `-m tcp` /
+`-m udp` matches, lists the states as `RELATED,ESTABLISHED` and shows `echo-request` as
+type `8`.
 
 ---
 
