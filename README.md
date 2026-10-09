@@ -9,7 +9,7 @@ and the VPS. Every command is listed with what it does and why.
 | Document | What it covers |
 |---|---|
 | [docs/RASPBERRY-SETUP.md](docs/RASPBERRY-SETUP.md) | Raspberry Pi OS Lite install, microSD → NVMe clone with `rpi-clone`, boot order, SSH hardening |
-| [docs/VPS-SETUP.md](docs/VPS-SETUP.md) | VPS SSH hardening: key-only login, `AuthenticationMethods`, `DisableForwarding`, banner, custom port via `ssh.socket`, Fail2ban |
+| [docs/VPS-SETUP.md](docs/VPS-SETUP.md) | VPS SSH hardening: key-only login, `AuthenticationMethods`, `DisableForwarding`, banner, custom port via `ssh.socket`, Fail2ban, base firewall (iptables IPv4/IPv6, `INPUT`/`FORWARD` DROP, `iptables-persistent`) |
 
 ## Placeholders
 
@@ -24,6 +24,7 @@ never committed: the `.gitignore` blocks `*.conf`, `*.key` and `.env`.
 | `<ADMIN_USER>` | Admin user on the VPS (with sudo) |
 | `<VPS_PUBLIC_IP>` | Public IPv4 of the VPS |
 | `<SSH_PORT>` | Custom SSH port on the VPS |
+| `<PUBLIC_IFACE>` | Name of the VPS public network interface (the one holding `<VPS_PUBLIC_IP>`) |
 | `<KEY_NAME>` | File name of the VPS SSH key pair on the laptop (`~/.ssh/<KEY_NAME>`) |
 | `<ALIAS>` | Host alias for the VPS in the laptop's `~/.ssh/config` |
 | `<comment>` | Free-text label stored in an SSH public key (`ssh-keygen -C`) |
