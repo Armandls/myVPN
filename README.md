@@ -2,8 +2,8 @@
 
 Personal homelab and WireGuard VPN project, being rebuilt step by step from a clean base.
 For now the repository documents the preparation of the two hosts (the Raspberry Pi and
-the VPS), the WireGuard hub on the VPS and the Pi as its first peer and home LAN gateway.
-Every command is listed with what it does and why.
+the VPS), the WireGuard hub on the VPS, the Pi as its first peer and home LAN gateway, and
+the phone and laptop clients. Every command is listed with what it does and why.
 
 ## Documents
 
@@ -13,6 +13,7 @@ Every command is listed with what it does and why.
 | [docs/VPS-SETUP.md](docs/VPS-SETUP.md) | VPS SSH hardening: key-only login, `AuthenticationMethods`, `DisableForwarding`, banner, custom port via `ssh.socket`, Fail2ban, base firewall (iptables IPv4/IPv6, `INPUT`/`FORWARD` DROP, `iptables-persistent`) |
 | [docs/VPS-WIREGUARD.md](docs/VPS-WIREGUARD.md) | WireGuard hub on the VPS: IPv4-only design, persistent `ip_forward`, key pair, `wg0.conf` with `PostUp`/`PostDown` hooks (FORWARD, MASQUERADE, MSS clamping), `wg-quick@wg0` at boot, verification and safe hook changes |
 | [docs/RASPBERRY-WIREGUARD.md](docs/RASPBERRY-WIREGUARD.md) | WireGuard on the Pi as spoke and home LAN gateway: `iptables` on Raspberry Pi OS, persistent `ip_forward`, key pair, `wg0.conf` dialling the hub (keepalive, FORWARD to the LAN, MASQUERADE, MSS clamping), Pi peer on the VPS, verification and reboot test |
+| [docs/CLIENTS.md](docs/CLIENTS.md) | Phone and laptop clients: SPLIT and FULL profiles sharing one key, IPv6 captured with `::/0`, laptop setup on Arch Linux (`resolvconf` provider), phone profiles by QR code, client peers on the VPS (`reload` vs `stop`/`start`), tests and source address filtering |
 
 ## Placeholders
 
@@ -29,6 +30,10 @@ never committed: the `.gitignore` blocks `*.conf`, `*.key` and `.env`.
 | `<HOME_ROUTER_IP>` | Home router address on the home LAN |
 | `<PI_PRIVATE_KEY>` | WireGuard private key of the Pi (content of `/etc/wireguard/privatekey` on the Pi, never leaves the Pi) |
 | `<PI_PUBLIC_KEY>` | WireGuard public key of the Pi (content of `/etc/wireguard/publickey` on the Pi) |
+| `<LAPTOP_PRIVATE_KEY>` | WireGuard private key of the laptop (content of `/etc/wireguard/laptop_private` on the laptop, never leaves the laptop) |
+| `<LAPTOP_PUBLIC_KEY>` | WireGuard public key of the laptop (content of `/etc/wireguard/laptop_public` on the laptop) |
+| `<PHONE_PRIVATE_KEY>` | WireGuard private key of the phone (generated on the laptop, imported by QR code, then deleted: lives only in the phone's WireGuard app) |
+| `<PHONE_PUBLIC_KEY>` | WireGuard public key of the phone |
 | `<ADMIN_USER>` | Admin user on the VPS (with sudo) |
 | `<VPS_PUBLIC_IP>` | Public IPv4 of the VPS |
 | `<SSH_PORT>` | Custom SSH port on the VPS |
@@ -41,9 +46,9 @@ never committed: the `.gitignore` blocks `*.conf`, `*.key` and `.env`.
 
 ## Status / next
 
-The WireGuard hub on the VPS is up, with the Pi as its first peer and gateway to the home
-LAN. The other clients (phone, laptop) and the homelab services on the Pi will be
-documented here as they are rebuilt.
+The WireGuard hub on the VPS is up with three peers: the Pi, gateway to the home LAN, and
+the phone and laptop clients, each with a SPLIT and a FULL profile. Next: Pi-hole and the
+other homelab services on the Pi, documented here as they are rebuilt.
 
 ## License
 
