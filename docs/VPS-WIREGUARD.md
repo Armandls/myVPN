@@ -1,6 +1,7 @@
 # VPS — WireGuard hub
 
-Record of the WireGuard setup on the VPS: the hub of the VPN, with no peers yet.
+Record of the WireGuard setup on the VPS: the hub of the VPN, documented here without
+peers (they are added in their own documents).
 
 The VPN is hub-and-spoke on `10.10.0.0/24`. The VPS (`10.10.0.1`) is the hub: it is the
 only peer with a public IP and it listens on `51820/udp`. Every other peer (Raspberry Pi
@@ -433,12 +434,16 @@ Rules learned while building this setup:
 ---
 
 ## Current state
-- `wg0` up with `10.10.0.1/24`, listening on `51820/udp`, no peers yet.
+- `wg0` up with `10.10.0.1/24`, listening on `51820/udp`.
+- Peers: the Raspberry Pi (`10.10.0.2` and the home LAN), added in
+  [RASPBERRY-WIREGUARD.md §6](RASPBERRY-WIREGUARD.md#6-add-the-pi-as-a-peer-on-the-vps).
 - Enabled at boot through `wg-quick@wg0`; survives a reboot alongside the base firewall.
 - IPv4-only tunnel; IPv6 `FORWARD` stays at `DROP`.
 
-Next: the Raspberry Pi as the first peer (document to come).
+Next: the clients (phone, laptop), in documents to come.
 
 ## Related documents
 - [VPS-SETUP.md](VPS-SETUP.md) — SSH hardening and the base firewall this setup builds on.
-- [RASPBERRY-SETUP.md](RASPBERRY-SETUP.md) — preparing the Raspberry Pi, the next peer.
+- [RASPBERRY-SETUP.md](RASPBERRY-SETUP.md) — preparing the Raspberry Pi.
+- [RASPBERRY-WIREGUARD.md](RASPBERRY-WIREGUARD.md) — the Pi as the first peer and home
+  LAN gateway.
