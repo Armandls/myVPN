@@ -420,16 +420,19 @@ to the keepalive, without touching the Pi.
 - The Pi forwards tunnel traffic to the home LAN with `MASQUERADE`; nothing changed on the
   home router.
 - The VPS knows the Pi peer and routes `<HOME_LAN_SUBNET>` through `wg0`.
+- The phone and laptop reach the home LAN through the hub and the Pi; see
+  [CLIENTS.md](CLIENTS.md).
 
 Pending:
 
 - DHCP reservation for the Pi in the home router (§4).
 - A host firewall on the Pi: its `INPUT` and `FORWARD` policies are `ACCEPT` today. It is
   planned as its own nftables table.
-- The clients (phone, laptop) and Pi-hole, in later documents.
+- Pi-hole, in a later document.
 
 ## Related documents
 - [VPS-WIREGUARD.md](VPS-WIREGUARD.md) — the WireGuard hub on the VPS, the hook rules and
   how to change hooks safely.
 - [RASPBERRY-SETUP.md](RASPBERRY-SETUP.md) — preparing the Pi: OS on NVMe and SSH
   hardening.
+- [CLIENTS.md](CLIENTS.md) — the phone and laptop clients that use the Pi gateway.

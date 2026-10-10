@@ -5,8 +5,8 @@ peers (they are added in their own documents).
 
 The VPN is hub-and-spoke on `10.10.0.0/24`. The VPS (`10.10.0.1`) is the hub: it is the
 only peer with a public IP and it listens on `51820/udp`. Every other peer (Raspberry Pi
-`10.10.0.2`, phone `10.10.0.11`, laptop `10.10.0.12`) connects to it. The peers are added
-later, each in its own document.
+`10.10.0.2`, phone `10.10.0.101`, laptop `10.10.0.102`) connects to it. The peers are
+added later, each in its own document.
 
 > **Prerequisite**: [VPS-SETUP.md](VPS-SETUP.md) done: SSH hardening and the base
 > firewall ([§7](VPS-SETUP.md#7-firewall-iptables-ipv4-and-ipv6)), with `INPUT` and
@@ -33,7 +33,8 @@ to handle IPv6:
 IPv4-only with IPv6 blocked on the clients was chosen: it is much simpler, and nearly
 every site is dual-stack, so IPv4 alone reaches it. The consequence is that the clients'
 FULL profiles **must capture or block IPv6** so it does not leak outside the tunnel. That
-is handled in the client documents.
+is handled in [CLIENTS.md](CLIENTS.md#design-points): `::/0` in `AllowedIPs` captures
+IPv6 into the tunnel, where it is dropped.
 
 ---
 
@@ -219,7 +220,7 @@ delivers the reply to the right peer.
 - `-s 10.10.0.0/24` — only VPN traffic is NATed, never the VPS's own traffic.
 - `-o <PUBLIC_IFACE>` — only traffic leaving to the internet is NATed. Traffic between
   peers leaves through `wg0` and is not touched, so the Pi sees the real address of the
-  client (`10.10.0.12`, not the VPS).
+  client (`10.10.0.102`, not the VPS).
 - `MASQUERADE` vs `SNAT`: `SNAT --to-source <address>` needs a fixed address written in
   the rule; `MASQUERADE` uses whatever address the interface has at that moment, so the
   rule needs no IP.
@@ -244,19 +245,19 @@ peer-to-peer traffic (`wg0` → `wg0`), which also leaves through `wg0`.
 ### 5.4 Packet journey
 A laptop in a café, on the FULL profile, opens a website:
 ```
-laptop (10.10.0.12)
+laptop (10.10.0.102)
    │  encrypted, over UDP to <VPS_PUBLIC_IP>:51820
    ▼
 VPS wg0 ── FORWARD -i wg0 ACCEPT ............................ rule 1
    │
    ▼
-POSTROUTING: source 10.10.0.12 → <VPS_PUBLIC_IP> (MASQUERADE) rule 3
+POSTROUTING: source 10.10.0.102 → <VPS_PUBLIC_IP> (MASQUERADE) rule 3
    │  out through <PUBLIC_IFACE>
    ▼
 website
    │  reply to <VPS_PUBLIC_IP>
    ▼
-VPS: conntrack reverses the NAT: destination → 10.10.0.12
+VPS: conntrack reverses the NAT: destination → 10.10.0.102
    │
    ▼
 mangle FORWARD -o wg0: MSS clamped in the SYN-ACK ........... rule 4
@@ -435,15 +436,18 @@ Rules learned while building this setup:
 
 ## Current state
 - `wg0` up with `10.10.0.1/24`, listening on `51820/udp`.
-- Peers: the Raspberry Pi (`10.10.0.2` and the home LAN), added in
-  [RASPBERRY-WIREGUARD.md §6](RASPBERRY-WIREGUARD.md#6-add-the-pi-as-a-peer-on-the-vps).
+- Three peers: the Raspberry Pi (`10.10.0.2` and the home LAN), added in
+  [RASPBERRY-WIREGUARD.md §6](RASPBERRY-WIREGUARD.md#6-add-the-pi-as-a-peer-on-the-vps),
+  and the phone (`10.10.0.101`) and laptop (`10.10.0.102`), added in
+  [CLIENTS.md §7](CLIENTS.md#7-add-the-clients-as-peers-on-the-vps).
 - Enabled at boot through `wg-quick@wg0`; survives a reboot alongside the base firewall.
 - IPv4-only tunnel; IPv6 `FORWARD` stays at `DROP`.
 
-Next: the clients (phone, laptop), in documents to come.
+Next: Pi-hole on the Pi, in a document to come.
 
 ## Related documents
 - [VPS-SETUP.md](VPS-SETUP.md) — SSH hardening and the base firewall this setup builds on.
 - [RASPBERRY-SETUP.md](RASPBERRY-SETUP.md) — preparing the Raspberry Pi.
 - [RASPBERRY-WIREGUARD.md](RASPBERRY-WIREGUARD.md) — the Pi as the first peer and home
   LAN gateway.
+- [CLIENTS.md](CLIENTS.md) — the phone and laptop clients (SPLIT and FULL profiles).
