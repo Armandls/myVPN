@@ -193,7 +193,7 @@ table inet pifw {
 | Block | What it does and why |
 |---|---|
 | `table inet pifw` / `delete table inet pifw` / `table inet pifw { ... }` | The first line creates the table empty if it does not exist, so `delete` never fails; the delete removes the old version; the block defines the new one. `nft -f` applies the whole file atomically: if anything is wrong, nothing changes. |
-| `set admin_nets` | The networks allowed to administer the Pi: the home LAN (IPv4) and the VPN. `flags interval` lets the set hold ranges. Pi-hole's rules will reuse it. |
+| `set admin_nets` | The networks allowed to administer the Pi: the home LAN (IPv4) and the VPN. `flags interval` lets the set hold ranges. Pi-hole's rules reuse it (§10). |
 | `iifname "lo" accept` | Local programs talking to local services. |
 | `ct state established,related accept` | Replies to everything the Pi starts: updates, DNS, NTP and the WireGuard tunnel itself. The Pi dials the VPS, and the keepalive keeps that conntrack entry alive, so the tunnel needs no open port. |
 | `ct state invalid counter drop` | Packets that belong to no valid connection. |
@@ -395,7 +395,7 @@ which removes only the `pifw` table (`ExecStop`), then fix the file.
 ## 9. Adding a service later
 Add an `accept` rule to the `input` chain, limited to `@admin_nets`; check the file with
 `nft -c` (§1.1); apply it with the revert timer (§2); test (§3); then cancel the timer
-(§4). Pi-hole's rules will be documented with Pi-hole.
+(§4). Pi-hole's rules are listed in §10.
 
 This applies to services that listen on the Pi itself (host networking). A Docker port
 published in bridge mode is translated (DNAT) to the container's address and goes through
@@ -403,23 +403,33 @@ published in bridge mode is translated (DNAT) to the container's address and goe
 when it comes from `wg0`. Such services need their own rules, documented with the
 service.
 
+## 10. Rules added later
+The listing in §1 is the original file. Since then, these rules were added to the `input`
+chain, right after the SSH rule:
+```
+        udp dport 53 ip saddr @admin_nets accept
+        tcp dport 53 ip saddr @admin_nets accept
+        tcp dport 8080 ip saddr @admin_nets accept
+```
+DNS and the web interface of Pi-hole, only from the home LAN and the VPN. They were added
+following §9; see [PIHOLE-UNBOUND.md §4](PIHOLE-UNBOUND.md#4-firewall-rules).
+
 ---
 
 ## Current state
 - Table `inet pifw` loaded at boot by `pifw.service`, reboot-verified; `nftables.service`
   disabled.
 - `input`: policy `drop`; SSH only from `<HOME_LAN_SUBNET>` and `10.10.0.0/24`, so SSH over
-  IPv6 is closed.
+  IPv6 is closed. DNS (`53`) and the Pi-hole web interface (`8080`) from the same
+  networks (§10).
 - `forward`: LAN→tunnel bridge closed (proved in §7); tunnel traffic limited to the home
   LAN.
 - Wi-Fi off; avahi disabled.
 
-Next: Pi-hole and Unbound, which will add DNS and web rules to `input`.
+Next: the other homelab services on the Pi.
 
 Pending:
 
-- DHCP reservation for the Pi in the home router
-  ([RASPBERRY-WIREGUARD.md §4](RASPBERRY-WIREGUARD.md#4-identify-the-lan-interface-and-subnet)).
 - Optional: reboot the VPS and confirm that the Pi reconnects on its own (keepalive).
 
 ## Related documents
@@ -427,3 +437,5 @@ Pending:
   gateway, whose hook rules live next to this table.
 - [RASPBERRY-SETUP.md](RASPBERRY-SETUP.md) — SSH hardening of the Pi.
 - [VPS-SETUP.md](VPS-SETUP.md) — the VPS firewall and the revert-timer lesson.
+- [PIHOLE-UNBOUND.md](PIHOLE-UNBOUND.md) — Pi-hole and Unbound, whose DNS and web rules
+  are in §10.

@@ -563,7 +563,7 @@ forwarded port, for example with `curl http://localhost:9999`: the connection fa
 the ssh session prints `channel ... open failed: administratively prohibited`. This
 proves that `DisableForwarding yes` is in effect. If ssh instead prints
 `open failed: connect failed: Connection refused`, forwarding is still enabled and simply
-nothing is listening on port `8080` yet (Pi-hole is installed later), so only
+nothing is listening on port `8080` yet (Pi-hole was installed later, see [PIHOLE-UNBOUND.md](PIHOLE-UNBOUND.md)), so only
 `administratively prohibited` proves that `DisableForwarding` works.
 
 ---

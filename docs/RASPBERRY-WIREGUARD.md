@@ -144,10 +144,9 @@ Shows the IPv4 address of that interface, as `inet <PI_LAN_IP>/<prefix>` (usuall
 `/24`). The network address of that range (the address with the host part set to `0`,
 written with that prefix) is the home LAN subnet, `<HOME_LAN_SUBNET>`.
 
-**Recommended (pending)**: create a DHCP reservation for the Pi in the home router, so
-`<PI_LAN_IP>` never changes. The tunnel works without it, because the hooks use the
-interface and the subnet, not the Pi's address. It will be needed later, when Pi-hole
-serves DNS on the Pi.
+**DHCP reservation**: the Pi has a DHCP reservation in the home router, so `<PI_LAN_IP>`
+never changes. The tunnel works without it, because the hooks use the interface and the
+subnet, not the Pi's address; Pi-hole, which serves DNS on `<PI_LAN_IP>`, does need it.
 
 > **Limitation**: if a remote network (a café, a hotel) uses the same range as the home
 > LAN, home devices are unreachable from there. The client's route to its own local
@@ -213,7 +212,7 @@ direction: here traffic goes from the tunnel to the LAN.
 
 **Rule 1 — `FORWARD -i %i -o <LAN_IFACE> -d <HOME_LAN_SUBNET> -j ACCEPT`.** Lets traffic
 from the tunnel be routed to the home LAN, and only to it (`-d <HOME_LAN_SUBNET>`). Once
-the `FORWARD` policy is `DROP` (Docker may set it), the Pi cannot be used as an exit to
+the `FORWARD` policy is `DROP` (Docker sets it when it has to enable IPv4 forwarding itself), the Pi cannot be used as an exit to
 the internet: a packet from the tunnel to any other destination matches no rule and is
 dropped. With policy `ACCEPT`, what prevents it is the VPS, which only routes `10.10.0.2`
 and `<HOME_LAN_SUBNET>` to the Pi, and the explicit drop in the Pi host firewall
@@ -243,7 +242,10 @@ tunnel. The MSS is explained in detail in
 **Why explicit `FORWARD` rules?** Today the policy of the iptables `FORWARD` chain is
 `ACCEPT`, so forwarding would work without rules 1 and 2. They are there because Docker, installed
 later for Pi-hole, may set the `FORWARD` policy to `DROP`: without these rules the tunnel
-would then stop reaching the LAN. Once the policy is `DROP`, they are also what limits
+would then stop reaching the LAN. On this Pi it did not: IPv4 forwarding was already on
+through `/etc/sysctl.d/99-vpn.conf`, so the policy stayed `ACCEPT`
+([PIHOLE-UNBOUND.md §1.3](PIHOLE-UNBOUND.md#13-check-that-nothing-else-changed)). The
+rules stay as insurance. Once the policy is `DROP`, they are also what limits
 forwarding to the cases above. The Pi host firewall keeps its own `forward` policy at
 `accept` and closes the unwanted paths with explicit drops instead
 ([RASPBERRY-FIREWALL.md](RASPBERRY-FIREWALL.md#design)).
@@ -429,11 +431,11 @@ to the keepalive, without touching the Pi.
 - The Pi host firewall is in place ([RASPBERRY-FIREWALL.md](RASPBERRY-FIREWALL.md)): the
   explicit drops in the `pifw` `forward` chain close the path from the LAN into the tunnel
   and keep tunnel traffic inside the home LAN.
+- DHCP reservation for the Pi in the home router (§4).
 
 Pending:
 
-- DHCP reservation for the Pi in the home router (§4).
-- Pi-hole, in a later document.
+- Optional: reboot the VPS and confirm that the Pi reconnects on its own (keepalive).
 
 ## Related documents
 - [VPS-WIREGUARD.md](VPS-WIREGUARD.md) — the WireGuard hub on the VPS, the hook rules and
@@ -442,3 +444,4 @@ Pending:
   hardening.
 - [CLIENTS.md](CLIENTS.md) — the phone and laptop clients that use the Pi gateway.
 - [RASPBERRY-FIREWALL.md](RASPBERRY-FIREWALL.md) — the Pi host firewall.
+- [PIHOLE-UNBOUND.md](PIHOLE-UNBOUND.md) — Pi-hole and Unbound on the Pi.
