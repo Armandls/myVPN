@@ -213,15 +213,17 @@ direction: here traffic goes from the tunnel to the LAN.
 
 **Rule 1 — `FORWARD -i %i -o <LAN_IFACE> -d <HOME_LAN_SUBNET> -j ACCEPT`.** Lets traffic
 from the tunnel be routed to the home LAN, and only to it (`-d <HOME_LAN_SUBNET>`). Once
-the `FORWARD` policy is `DROP` (Docker or the planned Pi firewall), the Pi cannot be used
-as an exit to the internet: a packet from the tunnel to any other destination matches no
-rule and is dropped. Today, with policy `ACCEPT`, what prevents it is the VPS, which only
-routes `10.10.0.2` and `<HOME_LAN_SUBNET>` to the Pi.
+the `FORWARD` policy is `DROP` (Docker may set it), the Pi cannot be used as an exit to
+the internet: a packet from the tunnel to any other destination matches no rule and is
+dropped. With policy `ACCEPT`, what prevents it is the VPS, which only routes `10.10.0.2`
+and `<HOME_LAN_SUBNET>` to the Pi, and the explicit drop in the Pi host firewall
+([RASPBERRY-FIREWALL.md](RASPBERRY-FIREWALL.md)).
 
 **Rule 2 — `FORWARD -i <LAN_IFACE> -o %i -m conntrack --ctstate RELATED,ESTABLISHED -j
 ACCEPT`.** Lets LAN traffic into the tunnel only if it belongs to a connection that a
-VPN peer already started. Replies come back; once the policy is `DROP`, LAN devices
-cannot start a connection into the tunnel.
+VPN peer already started. Replies come back. On its own, with policy `ACCEPT`, it does
+not stop LAN devices from starting a connection into the tunnel; that is done by an
+explicit drop in the Pi host firewall ([RASPBERRY-FIREWALL.md](RASPBERRY-FIREWALL.md)).
 
 **Rule 3 — `-t nat POSTROUTING -s 10.10.0.0/24 -o <LAN_IFACE> -j MASQUERADE`.** LAN
 devices use the home router as their default route, not the Pi. Without NAT, a LAN device
@@ -238,11 +240,13 @@ MSS of `1460`. The rule lowers the MSS in their `SYN-ACK` packets going into the
 tunnel. The MSS is explained in detail in
 [VPS-WIREGUARD.md §5.3](VPS-WIREGUARD.md#53-the-four-rules).
 
-**Why explicit `FORWARD` rules?** Today the Pi's `FORWARD` policy is `ACCEPT`, so
-forwarding would work without rules 1 and 2. They are there because Docker, installed
-later for Pi-hole, may set the `FORWARD` policy to `DROP` (and the planned Pi firewall
-will): without these rules the tunnel would then stop reaching the LAN. Once the policy is
-`DROP`, they are also what limits forwarding to the cases above.
+**Why explicit `FORWARD` rules?** Today the policy of the iptables `FORWARD` chain is
+`ACCEPT`, so forwarding would work without rules 1 and 2. They are there because Docker, installed
+later for Pi-hole, may set the `FORWARD` policy to `DROP`: without these rules the tunnel
+would then stop reaching the LAN. Once the policy is `DROP`, they are also what limits
+forwarding to the cases above. The Pi host firewall keeps its own `forward` policy at
+`accept` and closes the unwanted paths with explicit drops instead
+([RASPBERRY-FIREWALL.md](RASPBERRY-FIREWALL.md#design)).
 
 > Every `PostDown` mirrors its `PostUp`. Replace the placeholders with the real values in
 > the file on the Pi: a literal `<LAN_IFACE>` breaks the hooks (see the note at the end of
@@ -422,12 +426,13 @@ to the keepalive, without touching the Pi.
 - The VPS knows the Pi peer and routes `<HOME_LAN_SUBNET>` through `wg0`.
 - The phone and laptop reach the home LAN through the hub and the Pi; see
   [CLIENTS.md](CLIENTS.md).
+- The Pi host firewall is in place ([RASPBERRY-FIREWALL.md](RASPBERRY-FIREWALL.md)): the
+  explicit drops in the `pifw` `forward` chain close the path from the LAN into the tunnel
+  and keep tunnel traffic inside the home LAN.
 
 Pending:
 
 - DHCP reservation for the Pi in the home router (§4).
-- A host firewall on the Pi: its `INPUT` and `FORWARD` policies are `ACCEPT` today. It is
-  planned as its own nftables table.
 - Pi-hole, in a later document.
 
 ## Related documents
@@ -436,3 +441,4 @@ Pending:
 - [RASPBERRY-SETUP.md](RASPBERRY-SETUP.md) — preparing the Pi: OS on NVMe and SSH
   hardening.
 - [CLIENTS.md](CLIENTS.md) — the phone and laptop clients that use the Pi gateway.
+- [RASPBERRY-FIREWALL.md](RASPBERRY-FIREWALL.md) — the Pi host firewall.

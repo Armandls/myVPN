@@ -433,11 +433,13 @@ connections that stall.
 - The VPS has three peers: the Pi (`10.10.0.2` and the home LAN), the phone
   (`10.10.0.101`) and the laptop (`10.10.0.102`).
 - Both clients have a SPLIT and a FULL profile, verified from outside home.
+- The Pi host firewall is in place
+  ([RASPBERRY-FIREWALL.md](RASPBERRY-FIREWALL.md)): LAN devices cannot reach the clients
+  through the Pi.
 
 Pending:
 
 - Switch the FULL profiles to `DNS = 10.10.0.2` once Pi-hole is installed on the Pi.
-- A host firewall on the Pi: its `INPUT` and `FORWARD` policies are `ACCEPT` today.
 - DHCP reservation for the Pi in the home router
   ([RASPBERRY-WIREGUARD.md §4](RASPBERRY-WIREGUARD.md#4-identify-the-lan-interface-and-subnet)).
 

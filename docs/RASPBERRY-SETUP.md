@@ -571,10 +571,12 @@ nothing is listening on port `8080` yet (Pi-hole is installed later), so only
 ## Next steps
 
 WireGuard on the Pi (spoke and home LAN gateway) is documented in
-[RASPBERRY-WIREGUARD.md](RASPBERRY-WIREGUARD.md). The homelab services will be documented
+[RASPBERRY-WIREGUARD.md](RASPBERRY-WIREGUARD.md), and the Pi host firewall in
+[RASPBERRY-FIREWALL.md](RASPBERRY-FIREWALL.md). The homelab services will be documented
 later, as they are rebuilt.
 
 ## Related documents
 
 - [VPS-SETUP.md](VPS-SETUP.md) — SSH hardening of the VPS (the counterpart of step 11).
 - [RASPBERRY-WIREGUARD.md](RASPBERRY-WIREGUARD.md) — WireGuard on the Pi, the next step.
+- [RASPBERRY-FIREWALL.md](RASPBERRY-FIREWALL.md) — the Pi host firewall.

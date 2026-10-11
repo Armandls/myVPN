@@ -2,8 +2,9 @@
 
 Personal homelab and WireGuard VPN project, being rebuilt step by step from a clean base.
 For now the repository documents the preparation of the two hosts (the Raspberry Pi and
-the VPS), the WireGuard hub on the VPS, the Pi as its first peer and home LAN gateway, and
-the phone and laptop clients. Every command is listed with what it does and why.
+the VPS), the WireGuard hub on the VPS, the Pi as its first peer and home LAN gateway, the
+phone and laptop clients, and the Pi's host firewall. Every command is listed with what it
+does and why.
 
 ## Documents
 
@@ -14,6 +15,7 @@ the phone and laptop clients. Every command is listed with what it does and why.
 | [docs/VPS-WIREGUARD.md](docs/VPS-WIREGUARD.md) | WireGuard hub on the VPS: IPv4-only design, persistent `ip_forward`, key pair, `wg0.conf` with `PostUp`/`PostDown` hooks (FORWARD, MASQUERADE, MSS clamping), `wg-quick@wg0` at boot, verification and safe hook changes |
 | [docs/RASPBERRY-WIREGUARD.md](docs/RASPBERRY-WIREGUARD.md) | WireGuard on the Pi as spoke and home LAN gateway: `iptables` on Raspberry Pi OS, persistent `ip_forward`, key pair, `wg0.conf` dialling the hub (keepalive, FORWARD to the LAN, MASQUERADE, MSS clamping), Pi peer on the VPS, verification and reboot test |
 | [docs/CLIENTS.md](docs/CLIENTS.md) | Phone and laptop clients: SPLIT and FULL profiles sharing one key, IPv6 captured with `::/0`, laptop setup on Arch Linux (`resolvconf` provider), phone profiles by QR code, client peers on the VPS (`reload` vs `stop`/`start`), tests and source address filtering |
+| [docs/RASPBERRY-FIREWALL.md](docs/RASPBERRY-FIREWALL.md) | Pi host firewall: own nftables table `inet pifw` (no `flush ruleset`), `input` policy drop with SSH only from the LAN and the VPN, `forward` drops closing the LAN→tunnel path, Wi-Fi and avahi off, revert timer, `pifw.service` at boot, reboot and bridge tests |
 
 ## Placeholders
 
@@ -25,7 +27,9 @@ never committed: the `.gitignore` blocks `*.conf`, `*.key` and `.env`.
 | `<USER>` | Login user on the Pi, set in Raspberry Pi Imager |
 | `<PI_HOSTNAME>` | Hostname of the Pi, set in Raspberry Pi Imager |
 | `<PI_LAN_IP>` | Pi address on the home LAN |
+| `<PI_PUBLIC_IPV6>` | Global IPv6 address of the Pi (no NAT on IPv6: reachable from the internet unless the home router filters it) |
 | `<LAN_IFACE>` | Name of the Pi network interface on the home LAN (the one holding `<PI_LAN_IP>`) |
+| `<WLAN_IFACE>` | Name of the Pi Wi-Fi interface (turned off) |
 | `<HOME_LAN_SUBNET>` | Home LAN subnet in CIDR notation (network address of `<PI_LAN_IP>` with the prefix shown by `ip -4 addr`, usually `/24`) |
 | `<HOME_ROUTER_IP>` | Home router address on the home LAN |
 | `<PI_PRIVATE_KEY>` | WireGuard private key of the Pi (content of `/etc/wireguard/privatekey` on the Pi, never leaves the Pi) |
@@ -47,8 +51,9 @@ never committed: the `.gitignore` blocks `*.conf`, `*.key` and `.env`.
 ## Status / next
 
 The WireGuard hub on the VPS is up with three peers: the Pi, gateway to the home LAN, and
-the phone and laptop clients, each with a SPLIT and a FULL profile. Next: Pi-hole and the
-other homelab services on the Pi, documented here as they are rebuilt.
+the phone and laptop clients, each with a SPLIT and a FULL profile. The Pi has its own host
+firewall, which also closes the path from the home LAN into the tunnel. Next: Pi-hole and
+Unbound, then the other homelab services on the Pi, documented here as they are rebuilt.
 
 ## License
 
