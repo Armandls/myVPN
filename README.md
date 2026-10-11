@@ -3,7 +3,8 @@
 Personal homelab and WireGuard VPN project, being rebuilt step by step from a clean base.
 For now the repository documents the preparation of the two hosts (the Raspberry Pi and
 the VPS), the WireGuard hub on the VPS, the Pi as its first peer and home LAN gateway, the
-phone and laptop clients, and the Pi's host firewall. Every command is listed with what it
+phone and laptop clients, the Pi's host firewall, and DNS on the Pi with Pi-hole and
+Unbound. Every command is listed with what it
 does and why.
 
 ## Documents
@@ -16,6 +17,7 @@ does and why.
 | [docs/RASPBERRY-WIREGUARD.md](docs/RASPBERRY-WIREGUARD.md) | WireGuard on the Pi as spoke and home LAN gateway: `iptables` on Raspberry Pi OS, persistent `ip_forward`, key pair, `wg0.conf` dialling the hub (keepalive, FORWARD to the LAN, MASQUERADE, MSS clamping), Pi peer on the VPS, verification and reboot test |
 | [docs/CLIENTS.md](docs/CLIENTS.md) | Phone and laptop clients: SPLIT and FULL profiles sharing one key, IPv6 captured with `::/0`, laptop setup on Arch Linux (`resolvconf` provider), phone profiles by QR code, client peers on the VPS (`reload` vs `stop`/`start`), tests and source address filtering |
 | [docs/RASPBERRY-FIREWALL.md](docs/RASPBERRY-FIREWALL.md) | Pi host firewall: own nftables table `inet pifw` (no `flush ruleset`), `input` policy drop with SSH only from the LAN and the VPN, `forward` drops closing the LAN→tunnel path, Wi-Fi and avahi off, revert timer, `pifw.service` at boot, reboot and bridge tests |
+| [docs/PIHOLE-UNBOUND.md](docs/PIHOLE-UNBOUND.md) | DNS on the Pi: Docker from Docker's apt repository, Unbound as a recursive resolver with DNSSEC on `127.0.0.1:5335` (recursive vs DoT forwarder), Pi-hole on the host network with Unbound as its only upstream, `pifw` rules for DNS and the web interface, FULL profiles switched to Pi-hole, reboot test |
 
 ## Placeholders
 
@@ -44,6 +46,9 @@ never committed: the `.gitignore` blocks `*.conf`, `*.key` and `.env`.
 | `<VPS_PRIVATE_KEY>` | WireGuard private key of the VPS (content of `/etc/wireguard/privatekey`, never leaves the VPS) |
 | `<VPS_PUBLIC_KEY>` | WireGuard public key of the VPS (content of `/etc/wireguard/publickey` on the VPS) |
 | `<PUBLIC_IFACE>` | Name of the VPS public network interface (the one holding `<VPS_PUBLIC_IP>`) |
+| `<service>` | Name of a homelab service on the Pi (folder under `~/homelab/` and `/srv/appdata/`), e.g. `pihole`, `unbound` |
+| `<image>` | A container image with its tag, e.g. `pihole/pihole:2026.09.0` |
+| `<TIMEZONE>` | Time zone of the Pi-hole container (`TZ`), in `Area/City` form |
 | `<KEY_NAME>` | File name of the VPS SSH key pair on the laptop (`~/.ssh/<KEY_NAME>`) |
 | `<ALIAS>` | Host alias for the VPS in the laptop's `~/.ssh/config` |
 | `<comment>` | Free-text label stored in an SSH public key (`ssh-keygen -C`) |
@@ -52,8 +57,9 @@ never committed: the `.gitignore` blocks `*.conf`, `*.key` and `.env`.
 
 The WireGuard hub on the VPS is up with three peers: the Pi, gateway to the home LAN, and
 the phone and laptop clients, each with a SPLIT and a FULL profile. The Pi has its own host
-firewall, which also closes the path from the home LAN into the tunnel. Next: Pi-hole and
-Unbound, then the other homelab services on the Pi, documented here as they are rebuilt.
+firewall, which also closes the path from the home LAN into the tunnel. Pi-hole and
+Unbound run on the Pi as the VPN's DNS, used by the FULL profiles. Next: the other homelab
+services on the Pi, documented here as they are rebuilt.
 
 ## License
 

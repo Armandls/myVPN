@@ -443,7 +443,8 @@ Rules learned while building this setup:
 - Enabled at boot through `wg-quick@wg0`; survives a reboot alongside the base firewall.
 - IPv4-only tunnel; IPv6 `FORWARD` stays at `DROP`.
 
-Next: Pi-hole on the Pi, in a document to come.
+Next: Pi-hole and Unbound on the Pi are documented in
+[PIHOLE-UNBOUND.md](PIHOLE-UNBOUND.md); the other homelab services will follow.
 
 ## Related documents
 - [VPS-SETUP.md](VPS-SETUP.md) — SSH hardening and the base firewall this setup builds on.

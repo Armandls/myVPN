@@ -14,7 +14,7 @@ Each client has **two profiles that share one key and one address**:
 | | SPLIT (`casa-split`) | FULL (`casa-full`) |
 |---|---|---|
 | `AllowedIPs` | `10.10.0.0/24, <HOME_LAN_SUBNET>` | `0.0.0.0/0, ::/0` |
-| `DNS` | none (the local network's resolver) | `9.9.9.9`, reached through the tunnel |
+| `DNS` | none (the local network's resolver) | `10.10.0.2` (Pi-hole), reached through the tunnel |
 | Home LAN reachable | yes | yes |
 | Internet leaves from | the local network | the VPS (`<VPS_PUBLIC_IP>`) |
 | IPv6 | untouched | captured and dropped (no leak) |
@@ -51,11 +51,14 @@ Placeholders (`<LAPTOP_PRIVATE_KEY>`, `<HOME_ROUTER_IP>`, ...) are defined in th
    IPv6 traffic is dropped (and the VPS's IPv6 `FORWARD` policy is `DROP` as a second
    layer). Browsers and apps fall back to IPv4 within a moment, which
    does go through the tunnel, and nothing leaks through the local network.
-3. **DNS for FULL is temporarily a public resolver.** `DNS = 9.9.9.9` (Quad9) is covered
-   by `0.0.0.0/0`, so the queries travel inside the tunnel and leave from the VPS: the
-   local network cannot see them. Once Pi-hole is installed on the Pi, it becomes
-   `DNS = 10.10.0.2` (in a later document). SPLIT has no `DNS` line: it keeps using the
-   local network's resolver, which is fine because SPLIT does not route the internet.
+3. **DNS for FULL is Pi-hole on the Pi.** `DNS = 10.10.0.2` is covered by `0.0.0.0/0`,
+   so the queries travel inside the tunnel to the Pi: the local network cannot see them,
+   and ads and trackers are blocked
+   ([PIHOLE-UNBOUND.md](PIHOLE-UNBOUND.md)). Until Pi-hole existed, FULL used the public
+   resolver `9.9.9.9` (Quad9) through the tunnel. SPLIT has no `DNS` line: it keeps using
+   the local network's resolver, which is fine because SPLIT does not route the internet.
+   On Android, **Private DNS** must be **Off** or **Automatic**: with a specific hostname,
+   Android sends DNS straight to that provider and bypasses Pi-hole.
 4. **No `PersistentKeepalive` on the clients.** The clients always start the connection,
    and nobody needs to reach them while they are idle. Without the keepalive the tunnel
    is silent when there is no traffic, which saves battery on the phone. (The Pi needs
@@ -131,7 +134,7 @@ AllowedIPs = 10.10.0.0/24, <HOME_LAN_SUBNET>
 [Interface]
 Address = 10.10.0.102/24
 PrivateKey = <LAPTOP_PRIVATE_KEY>
-DNS = 9.9.9.9
+DNS = 10.10.0.2
 
 [Peer]
 PublicKey = <VPS_PUBLIC_KEY>
@@ -358,7 +361,13 @@ resolvectl status casa-full 2>/dev/null || cat /etc/resolv.conf
 ```
 Shows the resolver in use: with systemd-resolved, the DNS server of the `casa-full`
 interface; otherwise (`||`), the content of `/etc/resolv.conf`. It must show
-`nameserver 9.9.9.9` (or `9.9.9.9` as the interface's DNS server).
+`nameserver 10.10.0.2` (or `10.10.0.2` as the interface's DNS server).
+
+```
+dig doubleclick.net +short
+```
+Must print `0.0.0.0`: the query went through the tunnel to Pi-hole, which blocks the
+domain.
 
 ```
 ping -c 3 <HOME_ROUTER_IP>
@@ -436,15 +445,13 @@ connections that stall.
 - The Pi host firewall is in place
   ([RASPBERRY-FIREWALL.md](RASPBERRY-FIREWALL.md)): LAN devices cannot reach the clients
   through the Pi.
-
-Pending:
-
-- Switch the FULL profiles to `DNS = 10.10.0.2` once Pi-hole is installed on the Pi.
-- DHCP reservation for the Pi in the home router
-  ([RASPBERRY-WIREGUARD.md §4](RASPBERRY-WIREGUARD.md#4-identify-the-lan-interface-and-subnet)).
+- The FULL profiles use Pi-hole on the Pi, `DNS = 10.10.0.2`
+  ([PIHOLE-UNBOUND.md §5](PIHOLE-UNBOUND.md#5-full-profiles--pi-hole)).
 
 ## Related documents
 - [VPS-WIREGUARD.md](VPS-WIREGUARD.md) — the WireGuard hub, the IPv4-only design and how
   to change its configuration safely.
 - [RASPBERRY-WIREGUARD.md](RASPBERRY-WIREGUARD.md) — the Pi as peer and gateway to the
   home LAN.
+- [PIHOLE-UNBOUND.md](PIHOLE-UNBOUND.md) — Pi-hole and Unbound, the DNS of the FULL
+  profiles.
